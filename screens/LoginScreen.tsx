@@ -66,7 +66,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
         onLogin?.();
       } else {
         const body = await res.json().catch(() => null);
-        setError(body?.message ?? '회원가입에 실패했습니다. 다시 시도해주세요.');
+        setError(body?.error ?? body?.message ?? '회원가입에 실패했습니다. 다시 시도해주세요.');
       }
     } catch {
       setError('서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.');
