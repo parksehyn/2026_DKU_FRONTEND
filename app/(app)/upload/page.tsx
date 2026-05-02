@@ -1,9 +1,9 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import LandingScreen from '@/screens/LandingScreen';
+import UploadScreen from '@/screens/UploadScreen';
 
 export default function Page() {
   const router = useRouter();
-  return <LandingScreen onStart={() => router.push('/upload')} />;
+  return <UploadScreen onNext={() => router.push('/regulation')} />;
 }
