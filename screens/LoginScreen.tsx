@@ -18,7 +18,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
     }}>
       <div style={{
         display: 'grid', gridTemplateColumns: '1fr 1fr',
-        maxWidth: 800, width: '100%',
+        maxWidth: 960, width: '100%',
         borderRadius: 20, overflow: 'hidden',
         boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
       }}>
