@@ -10,6 +10,7 @@ interface BtnProps {
   onClick?: () => void;
   style?: React.CSSProperties;
   type?: 'button' | 'submit' | 'reset';
+  disabled?: boolean;
 }
 
 export default function Btn({
@@ -20,6 +21,7 @@ export default function Btn({
   onClick,
   style: sx,
   type = 'button',
+  disabled = false,
 }: BtnProps) {
   const base: React.CSSProperties = {
     fontFamily: 'var(--font-ui)',
@@ -49,7 +51,12 @@ export default function Btn({
   };
 
   return (
-    <button type={type} style={{ ...base, ...variants[variant], ...sx }} onClick={onClick}>
+    <button
+      type={type}
+      disabled={disabled}
+      style={{ ...base, ...variants[variant], ...(disabled ? { opacity: 0.5, cursor: 'not-allowed' } : {}), ...sx }}
+      onClick={disabled ? undefined : onClick}
+    >
       {children}
     </button>
   );

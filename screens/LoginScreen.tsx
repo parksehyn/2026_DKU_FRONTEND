@@ -2,13 +2,78 @@
 
 import React, { useState } from 'react';
 import { Btn, Field, Input } from '@/components/ui';
+import { apiFetch } from '@/lib/api';
+import { setToken } from '@/lib/auth';
 
 interface LoginScreenProps {
   onLogin?: () => void;
 }
 
+type Tab = 'login' | 'signup';
+
+interface AuthResponse {
+  token: string;
+  userId: number;
+  email: string;
+  name: string;
+}
+
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
-  const [tab, setTab] = useState<'login' | 'signup'>('login');
+  const [tab, setTab] = useState<Tab>('login');
+
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' });
+  const [signupForm, setSignupForm] = useState({ name: '', email: '', company: '', password: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleLogin = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await apiFetch('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: loginForm.email, password: loginForm.password }),
+      });
+      if (res.ok) {
+        const data: AuthResponse = await res.json();
+        setToken(data.token);
+        onLogin?.();
+      } else {
+        setError('이메일 또는 비밀번호가 올바르지 않습니다.');
+      }
+    } catch {
+      setError('서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSignup = async () => {
+    setError('');
+    if (signupForm.password.length < 8) {
+      setError('비밀번호는 8자 이상이어야 합니다.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await apiFetch('/api/auth/register', {
+        method: 'POST',
+        body: JSON.stringify({ email: signupForm.email, password: signupForm.password, name: signupForm.name }),
+      });
+      if (res.ok) {
+        const data: AuthResponse = await res.json();
+        setToken(data.token);
+        onLogin?.();
+      } else {
+        const body = await res.json().catch(() => null);
+        setError(body?.message ?? '회원가입에 실패했습니다. 다시 시도해주세요.');
+      }
+    } catch {
+      setError('서버에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div style={{
@@ -29,7 +94,6 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           position: 'relative', overflow: 'hidden',
         }}>
           <div style={{ position: 'absolute', right: -60, bottom: -80, width: 240, height: 240, background: 'rgba(255,255,255,0.04)', borderRadius: '50%' }} />
-          {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 32 }}>
             <div style={{ width: 36, height: 36, background: 'rgba(255,255,255,0.12)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -73,10 +137,9 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
 
         {/* Right — Auth form */}
         <div style={{ background: 'white', padding: '36px 40px', display: 'flex', flexDirection: 'column' }}>
-          {/* Tabs */}
           <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid #E2E7EF', marginBottom: 28 }}>
             {(['login', 'signup'] as const).map(t => (
-              <button key={t} onClick={() => setTab(t)} style={{
+              <button key={t} onClick={() => { setTab(t); setError(''); }} style={{
                 flex: 1, height: 40, border: 'none', background: 'none', cursor: 'pointer',
                 fontSize: 13, fontWeight: tab === t ? 700 : 500,
                 color: tab === t ? '#1C2B4A' : '#8A96A8',
@@ -86,18 +149,36 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             ))}
           </div>
 
+          {error && (
+            <div style={{
+              fontSize: 12, color: '#C8374A',
+              background: '#FDECEA', border: '1px solid #F5C6C6',
+              borderRadius: 6, padding: '8px 12px', marginBottom: 16,
+            }}>{error}</div>
+          )}
+
           {tab === 'login' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flex: 1 }}>
               <Field label="이메일" required>
-                <Input placeholder="name@company.com" type="email" />
+                <Input
+                  placeholder="name@company.com" type="email"
+                  value={loginForm.email}
+                  onChange={e => setLoginForm(f => ({ ...f, email: e.target.value }))}
+                />
               </Field>
               <Field label="비밀번호" required>
-                <Input placeholder="비밀번호 입력" type="password" />
+                <Input
+                  placeholder="비밀번호 입력" type="password"
+                  value={loginForm.password}
+                  onChange={e => setLoginForm(f => ({ ...f, password: e.target.value }))}
+                />
               </Field>
               <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
                 <span style={{ fontSize: 12, color: '#4A6FA5', cursor: 'pointer' }}>비밀번호 찾기</span>
               </div>
-              <Btn variant="navy" full size="lg" onClick={onLogin}>로그인</Btn>
+              <Btn variant="navy" full size="lg" onClick={handleLogin} disabled={loading}>
+                {loading ? '로그인 중...' : '로그인'}
+              </Btn>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0' }}>
                 <div style={{ flex: 1, height: 1, background: '#E2E7EF' }} />
                 <span style={{ fontSize: 11, color: '#B8C2D0' }}>또는</span>
@@ -110,11 +191,37 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0, flex: 1 }}>
-              <Field label="이름" required><Input placeholder="홍길동" /></Field>
-              <Field label="이메일" required><Input placeholder="name@company.com" type="email" /></Field>
-              <Field label="회사명" required><Input placeholder="(주)가결테크" /></Field>
-              <Field label="비밀번호" required><Input placeholder="8자 이상 입력" type="password" /></Field>
-              <Btn variant="navy" full size="lg" style={{ marginTop: 8 }} onClick={onLogin}>회원가입</Btn>
+              <Field label="이름" required>
+                <Input
+                  placeholder="홍길동"
+                  value={signupForm.name}
+                  onChange={e => setSignupForm(f => ({ ...f, name: e.target.value }))}
+                />
+              </Field>
+              <Field label="이메일" required>
+                <Input
+                  placeholder="name@company.com" type="email"
+                  value={signupForm.email}
+                  onChange={e => setSignupForm(f => ({ ...f, email: e.target.value }))}
+                />
+              </Field>
+              <Field label="회사명" required>
+                <Input
+                  placeholder="(주)가결테크"
+                  value={signupForm.company}
+                  onChange={e => setSignupForm(f => ({ ...f, company: e.target.value }))}
+                />
+              </Field>
+              <Field label="비밀번호" required>
+                <Input
+                  placeholder="8자 이상 입력" type="password"
+                  value={signupForm.password}
+                  onChange={e => setSignupForm(f => ({ ...f, password: e.target.value }))}
+                />
+              </Field>
+              <Btn variant="navy" full size="lg" style={{ marginTop: 8 }} onClick={handleSignup} disabled={loading}>
+                {loading ? '처리 중...' : '회원가입'}
+              </Btn>
             </div>
           )}
         </div>
