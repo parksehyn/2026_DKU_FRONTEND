@@ -5,5 +5,5 @@ import LoginScreen from '@/screens/LoginScreen';
 
 export default function Page() {
   const router = useRouter();
-  return <LoginScreen onLogin={() => router.push('/upload')} />;
+  return <LoginScreen onLogin={() => router.push('/dashboard')} />;
 }

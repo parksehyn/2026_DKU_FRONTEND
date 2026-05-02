@@ -2,14 +2,34 @@
 
 import React from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 interface GNBProps {
   activeMenu?: string;
+  onMenuClick?: (menu: string) => void;
 }
 
 const menus = ['대시보드', '지출결의', '규정 관리', '보고서'];
 
-export default function GNB({ activeMenu = '대시보드' }: GNBProps) {
+const MENU_ROUTES: Record<string, string> = {
+  '대시보드': '/dashboard',
+  '지출결의': '/upload',
+  '규정 관리': '/regulation',
+  '보고서': '#',
+};
+
+export default function GNB({ activeMenu = '대시보드', onMenuClick }: GNBProps) {
+  const router = useRouter();
+
+  const handleClick = (m: string) => {
+    if (onMenuClick) {
+      onMenuClick(m);
+    } else {
+      const route = MENU_ROUTES[m];
+      if (route && route !== '#') router.push(route);
+    }
+  };
+
   return (
     <nav style={{
       height: 56, background: '#FFFFFF',
@@ -19,7 +39,7 @@ export default function GNB({ activeMenu = '대시보드' }: GNBProps) {
       position: 'sticky', top: 0, zIndex: 100,
     }}>
       {/* Logo */}
-      <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, textDecoration: 'none' }}>
+      <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, textDecoration: 'none' }}>
         <div style={{
           width: 28, height: 28, background: '#1C2B4A',
           borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -35,11 +55,11 @@ export default function GNB({ activeMenu = '대시보드' }: GNBProps) {
       {/* Nav links */}
       <div style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
         {menus.map(m => (
-          <a key={m} href="#" style={{
+          <a key={m} onClick={() => handleClick(m)} style={{
             fontSize: 13,
             fontWeight: m === activeMenu ? 700 : 500,
             color: m === activeMenu ? '#1C2B4A' : '#8A96A8',
-            textDecoration: 'none',
+            textDecoration: 'none', cursor: 'pointer',
             height: 56, display: 'flex', alignItems: 'center',
             padding: '0 16px',
             borderBottom: m === activeMenu ? '2px solid #1C2B4A' : '2px solid transparent',
