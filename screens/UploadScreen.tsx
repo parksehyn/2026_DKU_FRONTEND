@@ -1,13 +1,14 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import HeroBand from '@/components/HeroBand';
 import { Btn, Badge, SectionHead } from '@/components/ui';
+import { apiFetch } from '@/lib/api';
 
-interface UploadFile {
-  name: string;
-  size: string;
-  status: string;
+interface PolicyFile {
+  policyId: number;
+  policyName: string;
+  createdAt: string;
 }
 
 interface UploadScreenProps {
@@ -15,11 +16,68 @@ interface UploadScreenProps {
 }
 
 export default function UploadScreen({ onNext }: UploadScreenProps) {
-  const [files, setFiles] = useState<UploadFile[]>([
-    { name: '2025_출장비_규정.pdf', size: '2.3 MB', status: 'ok' },
-    { name: '법인카드_사용지침.docx', size: '1.1 MB', status: 'ok' },
-  ]);
+  const [policies, setPolicies] = useState<PolicyFile[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    loadPolicies();
+  }, []);
+
+  async function loadPolicies() {
+    try {
+      const res = await apiFetch('/api/policies');
+      if (res.ok) {
+        const data: PolicyFile[] = await res.json();
+        setPolicies(data);
+      }
+    } catch {
+      // 목록 로드 실패 시 빈 상태 유지
+    }
+  }
+
+  async function uploadFile(file: File) {
+    setUploading(true);
+    setError('');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('policyName', file.name.replace(/\.[^.]+$/, ''));
+
+      const res = await apiFetch('/api/policies/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        await loadPolicies();
+      } else {
+        const body = await res.json().catch(() => null);
+        setError(body?.error ?? '업로드에 실패했습니다.');
+      }
+    } catch {
+      setError('서버에 연결할 수 없습니다.');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function deletePolicy(policyId: number) {
+    try {
+      const res = await apiFetch(`/api/policies/${policyId}`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        setPolicies(prev => prev.filter(p => p.policyId !== policyId));
+      }
+    } catch {
+      // 삭제 실패 시 무시
+    }
+  }
+
+  function formatDate(dateStr: string) {
+    return dateStr.slice(0, 10);
+  }
 
   return (
     <div style={{ fontFamily: 'var(--font-ui)' }}>
@@ -33,17 +91,36 @@ export default function UploadScreen({ onNext }: UploadScreenProps) {
         </>}
       />
       <div style={{ padding: '28px 40px' }}>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.docx"
+          style={{ display: 'none' }}
+          onChange={e => {
+            const file = e.target.files?.[0];
+            if (file) uploadFile(file);
+            e.target.value = '';
+          }}
+        />
+
         {/* Upload zone */}
         <div
+          onClick={() => !uploading && fileInputRef.current?.click()}
           onDragOver={e => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
-          onDrop={() => setDragging(false)}
+          onDrop={e => {
+            e.preventDefault();
+            setDragging(false);
+            const file = e.dataTransfer.files?.[0];
+            if (file && !uploading) uploadFile(file);
+          }}
           style={{
             border: `1.5px dashed ${dragging ? '#1C2B4A' : '#B8C2D0'}`,
             borderRadius: 12, padding: '40px 24px',
             textAlign: 'center',
             background: dragging ? '#EAF0F8' : '#F4F6FA',
-            cursor: 'pointer', transition: 'all 0.15s',
+            cursor: uploading ? 'not-allowed' : 'pointer',
+            transition: 'all 0.15s',
             marginBottom: 24,
           }}
         >
@@ -58,17 +135,25 @@ export default function UploadScreen({ onNext }: UploadScreenProps) {
             </svg>
           </div>
           <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2B4A', marginBottom: 4 }}>
-            {dragging ? '파일을 놓아주세요' : '파일을 드래그하거나 클릭하세요'}
+            {uploading ? '업로드 중...' : dragging ? '파일을 놓아주세요' : '파일을 드래그하거나 클릭하세요'}
           </div>
           <div style={{ fontSize: 11, color: '#8A96A8' }}>PDF, DOCX 지원 · 최대 10MB</div>
         </div>
 
+        {error && (
+          <div style={{
+            fontSize: 12, color: '#C8374A',
+            background: '#FDECEA', border: '1px solid #F5C6C6',
+            borderRadius: 6, padding: '8px 12px', marginBottom: 16,
+          }}>{error}</div>
+        )}
+
         {/* File list */}
-        {files.length > 0 && (
+        {policies.length > 0 && (
           <div>
-            <SectionHead title="업로드된 파일" />
-            {files.map((f, i) => (
-              <div key={i} style={{
+            <SectionHead title="업로드된 규정" />
+            {policies.map(p => (
+              <div key={p.policyId} style={{
                 display: 'flex', alignItems: 'center', gap: 12,
                 background: 'white', border: '1px solid #E2E7EF',
                 borderRadius: 8, padding: '12px 16px', marginBottom: 8,
@@ -83,13 +168,13 @@ export default function UploadScreen({ onNext }: UploadScreenProps) {
                   </svg>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2B4A' }}>{f.name}</div>
-                  <div style={{ fontSize: 11, color: '#8A96A8' }}>{f.size}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1C2B4A' }}>{p.policyName}</div>
+                  <div style={{ fontSize: 11, color: '#8A96A8' }}>{formatDate(p.createdAt)}</div>
                 </div>
                 <Badge variant="ok">업로드 완료</Badge>
                 <span
                   style={{ fontSize: 18, color: '#B8C2D0', cursor: 'pointer', lineHeight: 1 }}
-                  onClick={() => setFiles(files.filter((_, j) => j !== i))}
+                  onClick={() => deletePolicy(p.policyId)}
                 >×</span>
               </div>
             ))}
