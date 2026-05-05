@@ -82,13 +82,13 @@ export default function UploadScreen({ onNext }: UploadScreenProps) {
   return (
     <div style={{ fontFamily: 'var(--font-ui)' }}>
       <HeroBand
-        tag="STEP 1 · 규정 업로드"
+        tag="규정 관리"
         title="규정책을 업로드하세요"
-        desc="지출 관련 내부 규정 문서를 업로드하면 AI가 핵심 규정을 자동으로 추출합니다."
-        actions={<>
+        desc="지출 관련 내부 규정 문서를 업로드하면 RAG 기반으로 검색에 활용됩니다."
+        actions={onNext ? <>
           <Btn variant="outline">건너뛰기</Btn>
           <Btn variant="navy" onClick={onNext}>다음 단계 →</Btn>
-        </>}
+        </> : undefined}
       />
       <div style={{ padding: '28px 40px' }}>
         <input

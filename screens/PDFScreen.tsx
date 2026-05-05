@@ -3,13 +3,16 @@
 import React, { useState } from 'react';
 import HeroBand from '@/components/HeroBand';
 import { Btn, SectionHead } from '@/components/ui';
+import { apiFetch } from '@/lib/api';
 
 interface PDFScreenProps {
   onPrev?: () => void;
 }
 
 export default function PDFScreen({ onPrev }: PDFScreenProps) {
+  const [downloading, setDownloading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
 
   const summaryRows = [
     { label: '결의서 번호', value: 'EXP-2025-0142' },
@@ -19,12 +22,56 @@ export default function PDFScreen({ onPrev }: PDFScreenProps) {
     { label: '준수율',      value: '60%', mono: true, warn: true },
   ];
 
+  async function handleDownload() {
+    const evidenceId = sessionStorage.getItem('evidenceId');
+    const formId = sessionStorage.getItem('formId');
+    const filledFieldsRaw = sessionStorage.getItem('filledFields');
+
+    if (!evidenceId || !formId) {
+      setError('증빙 정보가 없습니다. 처음부터 다시 진행해 주세요.');
+      return;
+    }
+
+    setDownloading(true);
+    setError('');
+    try {
+      const filledFields: Record<string, string> = filledFieldsRaw ? JSON.parse(filledFieldsRaw) : {};
+      const userInputFieldsRaw = sessionStorage.getItem('userInputFields');
+      const userInputFields: Record<string, string> = userInputFieldsRaw ? JSON.parse(userInputFieldsRaw) : {};
+      const res = await apiFetch(`/api/evidence/${evidenceId}/complete`, {
+        method: 'POST',
+        body: JSON.stringify({
+          forms: [{ formId: Number(formId), filledFields, userInputFields }],
+        }),
+      });
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const contentType = res.headers.get('content-type') ?? '';
+        const ext = contentType.includes('zip') ? '.zip' : '.docx';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `지출결의서${ext}`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const body = await res.json().catch(() => null);
+        setError(body?.error ?? '파일 생성에 실패했습니다.');
+      }
+    } catch {
+      setError('서버에 연결할 수 없습니다.');
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
     <div style={{ fontFamily: 'var(--font-ui)' }}>
       <HeroBand
-        tag="STEP 7 · PDF 저장"
+        tag="STEP 5 · PDF 저장"
         title="결의서를 저장·제출하세요"
-        desc="최종 검토 후 PDF로 저장하거나 결재 라인에 제출합니다."
+        desc="최종 검토 후 파일로 저장하거나 결재 라인에 제출합니다."
         compact
         actions={<>
           <Btn variant="outline" onClick={onPrev}>이전</Btn>
@@ -37,7 +84,7 @@ export default function PDFScreen({ onPrev }: PDFScreenProps) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
           {/* Left — PDF preview card */}
           <div>
-            <SectionHead title="PDF 미리보기" />
+            <SectionHead title="파일 다운로드" />
             <div style={{ background: 'white', borderRadius: 16, border: '1px solid #E2E7EF', overflow: 'hidden' }}>
               <div style={{
                 background: '#F4F6FA', height: 260,
@@ -51,20 +98,30 @@ export default function PDFScreen({ onPrev }: PDFScreenProps) {
                   boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
                 }}>
                   <div style={{ textAlign: 'center', fontSize: 8, fontWeight: 700, color: '#1C2B4A', borderBottom: '1.5px solid #1C2B4A', paddingBottom: 6, marginBottom: 8 }}>
-                    출장비 지출결의서
+                    지출결의서
                   </div>
                   {[80, 60, 90, 70, 85, 75].map((w, i) => (
                     <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
                       <div style={{ height: 2, background: '#E2E7EF', borderRadius: 1, width: 30, flexShrink: 0 }} />
-                      <div style={{ height: 2, background: i === 3 ? '#C8374A' : '#B8C2D0', borderRadius: 1, width: `${w}%` }} />
+                      <div style={{ height: 2, background: '#B8C2D0', borderRadius: 1, width: `${w}%` }} />
                     </div>
                   ))}
                 </div>
-                <div style={{ fontSize: 10, color: '#8A96A8' }}>출장비_결의서_2025-01-17.pdf</div>
+                <div style={{ fontSize: 10, color: '#8A96A8' }}>지출결의서.docx / .zip</div>
               </div>
+
+              {error && (
+                <div style={{
+                  fontSize: 12, color: '#C8374A',
+                  background: '#FDECEA', borderBottom: '1px solid #F5C6C6',
+                  padding: '8px 16px',
+                }}>{error}</div>
+              )}
+
               <div style={{ padding: 16, display: 'flex', gap: 8 }}>
-                <Btn variant="navy" full>PDF 다운로드</Btn>
-                <Btn variant="gray">인쇄</Btn>
+                <Btn variant="navy" full onClick={handleDownload}>
+                  {downloading ? '생성 중...' : '파일 다운로드'}
+                </Btn>
               </div>
             </div>
           </div>
@@ -109,7 +166,7 @@ export default function PDFScreen({ onPrev }: PDFScreenProps) {
                   <div style={{ fontSize: 11, color: '#5A6475', marginTop: 2 }}>
                     {submitted
                       ? '결재 라인에 성공적으로 제출되었습니다.'
-                      : '숙박비 위반 항목이 포함된 상태로 제출됩니다.'}
+                      : '규정 위반 항목이 포함된 상태로 제출됩니다.'}
                   </div>
                 </div>
               </div>

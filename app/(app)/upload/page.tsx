@@ -1,9 +1,10 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import UploadScreen from '@/screens/UploadScreen';
 
 export default function Page() {
   const router = useRouter();
-  return <UploadScreen onNext={() => router.push('/regulation')} />;
+  useEffect(() => { router.replace('/receipt'); }, [router]);
+  return null;
 }
