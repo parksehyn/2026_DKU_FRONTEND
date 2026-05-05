@@ -8,7 +8,6 @@ export default function Page() {
   return (
     <ReceiptScreen
       onNext={() => router.push('/doc-review')}
-      onPrev={() => router.push('/regulation')}
       step={5}
     />
   );

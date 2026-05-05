@@ -1,27 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import HeroBand from '@/components/HeroBand';
 import { Btn, Badge } from '@/components/ui';
-
-interface DocRow {
-  label: string;
-  value: string;
-  warn?: boolean;
-  mono?: boolean;
-  total?: boolean;
-  badge?: string;
-}
-
-const rows: DocRow[] = [
-  { label: '신청자',   value: '김민준 (개발팀)' },
-  { label: '출장지',   value: '부산 본사' },
-  { label: '출장기간', value: '2025-01-15 ~ 2025-01-17' },
-  { label: '교통비',   value: '120,000원', mono: true },
-  { label: '숙박비',   value: '450,000원', warn: true, mono: true, badge: '위반' },
-  { label: '식비',     value: '85,000원', mono: true },
-  { label: '합계',     value: '655,000원', total: true, mono: true },
-];
 
 interface DocReviewScreenProps {
   onNext?: () => void;
@@ -29,12 +10,34 @@ interface DocReviewScreenProps {
 }
 
 export default function DocReviewScreen({ onNext, onPrev }: DocReviewScreenProps) {
+  const [filledFields, setFilledFields] = useState<Record<string, string>>({});
+  const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [userInputFields, setUserInputFields] = useState<Record<string, string>>({});
+  const [formName, setFormName] = useState('지출결의서');
+
+  useEffect(() => {
+    const filled = sessionStorage.getItem('filledFields');
+    const missing = sessionStorage.getItem('missingFields');
+    const name = sessionStorage.getItem('formName');
+    if (filled) setFilledFields(JSON.parse(filled));
+    if (missing) setMissingFields(JSON.parse(missing));
+    if (name) setFormName(name);
+  }, []);
+
+  function handleUserInput(field: string, value: string) {
+    const updated = { ...userInputFields, [field]: value };
+    setUserInputFields(updated);
+    sessionStorage.setItem('userInputFields', JSON.stringify(updated));
+  }
+
+  const hasData = Object.keys(filledFields).length > 0 || missingFields.length > 0;
+
   return (
     <div style={{ fontFamily: 'var(--font-ui)' }}>
       <HeroBand
-        tag="STEP 6 · 문서 확인"
+        tag="STEP 4 · 문서 확인"
         title="초안 문서를 확인하세요"
-        desc="자동 완성된 지출결의서를 검토하세요."
+        desc="AI가 자동 입력한 내용을 확인하고 누락 항목을 직접 입력하세요."
         compact
         actions={<>
           <Btn variant="outline" onClick={onPrev}>이전</Btn>
@@ -50,41 +53,62 @@ export default function DocReviewScreen({ onNext, onPrev }: DocReviewScreenProps
           <div style={{
             textAlign: 'center', fontSize: 15, fontWeight: 700, color: '#1C2B4A',
             borderBottom: '2px solid #1C2B4A', paddingBottom: 12, marginBottom: 16,
-          }}>출장비 지출결의서</div>
+          }}>{formName}</div>
 
-          {rows.map((r, i) => (
-            <div key={i} style={{
+          {!hasData && (
+            <div style={{ textAlign: 'center', padding: '40px 0', fontSize: 13, color: '#8A96A8' }}>
+              증빙 업로드 후 자동 입력된 내용이 표시됩니다.
+            </div>
+          )}
+
+          {/* 자동 입력된 필드 */}
+          {Object.entries(filledFields).map(([key, value], i) => (
+            <div key={key} style={{
               display: 'flex',
-              borderBottom: i < rows.length - 1 ? '1px solid #E2E7EF' : 'none',
-              background: r.total ? '#1C2B4A' : r.warn ? '#FDECEA' : 'transparent',
+              borderBottom: '1px solid #E2E7EF',
             }}>
               <div style={{
-                width: 120, padding: '8px 10px', fontSize: 11, fontWeight: 600, flexShrink: 0,
-                background: r.total ? 'transparent' : '#F4F6FA',
-                color: r.total ? 'rgba(255,255,255,0.6)' : r.warn ? '#C8374A' : '#8A96A8',
-                borderRight: `1px solid ${r.total ? 'rgba(255,255,255,0.15)' : r.warn ? 'rgba(200,55,74,0.2)' : '#E2E7EF'}`,
-              }}>{r.label}</div>
+                width: 120, padding: '10px 10px', fontSize: 11, fontWeight: 600,
+                background: '#F4F6FA', color: '#8A96A8', flexShrink: 0,
+                borderRight: '1px solid #E2E7EF',
+              }}>{key}</div>
               <div style={{
-                padding: '8px 12px', flex: 1,
-                color: r.total ? 'white' : r.warn ? '#C8374A' : '#1C2B4A',
-                fontFamily: r.mono ? 'var(--font-mono)' : 'inherit',
-                fontWeight: r.total ? 700 : 400,
-                fontSize: r.total ? 15 : 12,
+                padding: '10px 12px', flex: 1, fontSize: 12, color: '#1C2B4A',
                 display: 'flex', alignItems: 'center', gap: 8,
               }}>
-                {r.value}
-                {r.badge && <Badge variant="err">{r.badge}</Badge>}
+                {value}
+                <Badge variant="ok">자동</Badge>
               </div>
             </div>
           ))}
 
-          <div style={{
-            background: '#FDECEA', borderLeft: '3px solid #C8374A',
-            padding: '8px 12px', borderRadius: '0 4px 4px 0', marginTop: 10,
-            fontSize: 11, color: '#C8374A',
-          }}>
-            숙박비 규정 한도(300,000원)를 150,000원 초과합니다. 다음 단계에서 수정하세요.
-          </div>
+          {/* 누락 필드 — 직접 입력 */}
+          {missingFields.map((field) => (
+            <div key={field} style={{
+              display: 'flex',
+              borderBottom: '1px solid #E2E7EF',
+              background: '#FFFBF0',
+            }}>
+              <div style={{
+                width: 120, padding: '10px 10px', fontSize: 11, fontWeight: 600,
+                background: '#FDF5E0', color: '#C08020', flexShrink: 0,
+                borderRight: '1px solid #F0E0B0',
+              }}>{field}</div>
+              <div style={{ padding: '6px 10px', flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input
+                  value={userInputFields[field] ?? ''}
+                  onChange={e => handleUserInput(field, e.target.value)}
+                  placeholder="직접 입력"
+                  style={{
+                    flex: 1, border: '1px solid #E2E7EF', borderRadius: 4,
+                    padding: '5px 8px', fontSize: 12, fontFamily: 'var(--font-ui)',
+                    color: '#1C2B4A', outline: 'none', height: 30,
+                  }}
+                />
+                <Badge variant="warn">누락</Badge>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

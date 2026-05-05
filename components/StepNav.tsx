@@ -3,8 +3,7 @@
 import React, { Fragment } from 'react';
 
 export const STEPS = [
-  '규정 업로드', '규정 추출', '증빙 업로드',
-  '양식 추천', '자동 입력', '문서 확인', 'PDF 저장',
+  '증빙 업로드', '양식 추천', '자동 입력', '문서 확인', 'PDF 저장',
 ];
 
 interface StepNavProps {

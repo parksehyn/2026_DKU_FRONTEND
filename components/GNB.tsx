@@ -13,9 +13,9 @@ const menus = ['대시보드', '지출결의', '규정 관리', '보고서'];
 
 const MENU_ROUTES: Record<string, string> = {
   '대시보드': '/dashboard',
-  '지출결의': '/upload',
+  '지출결의': '/receipt',
   '규정 관리': '/regulation',
-  '보고서': '#',
+  '보고서': '/forms',
 };
 
 export default function GNB({ activeMenu = '대시보드', onMenuClick }: GNBProps) {

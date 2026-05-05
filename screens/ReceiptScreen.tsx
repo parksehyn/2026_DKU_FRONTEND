@@ -66,6 +66,8 @@ export default function ReceiptScreen({ onNext, onPrev, step = 5 }: ReceiptScree
         if (firstResult) {
           sessionStorage.setItem('filledFields', JSON.stringify(firstResult.filledFields));
           sessionStorage.setItem('formId', String(firstResult.formId));
+          sessionStorage.setItem('formName', firstResult.formName);
+          sessionStorage.setItem('missingFields', JSON.stringify(firstResult.missingFields));
           setFields(prev => ({ ...prev, ...mapFilledFields(firstResult.filledFields) }));
         }
         setFilled(true);
