@@ -29,7 +29,8 @@ export default function UploadScreen({ onNext }: UploadScreenProps) {
 
   async function loadPolicies() {
     try {
-      const res = await apiFetch('/api/policies');
+      const groupId = getGroupId();
+      const res = await apiFetch(`/api/policies${groupId ? `?groupId=${groupId}` : ''}`);
       if (res.ok) {
         const data: PolicyFile[] = await res.json();
         setPolicies(data);
