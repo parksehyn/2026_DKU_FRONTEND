@@ -9,8 +9,8 @@ export default function Page() {
   const router = useRouter();
 
   useEffect(() => {
-    if (isAuthenticated()) router.replace('/dashboard');
+    if (isAuthenticated()) router.replace('/group-select');
   }, [router]);
 
-  return <LoginScreen onLogin={() => router.push('/dashboard')} />;
+  return <LoginScreen onLogin={() => router.push('/group-select')} />;
 }

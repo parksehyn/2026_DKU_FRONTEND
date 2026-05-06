@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import HeroBand from '@/components/HeroBand';
 import { Badge, SectionHead } from '@/components/ui';
 import { apiFetch } from '@/lib/api';
+import { getGroupId } from '@/lib/group';
 
 interface FormItem {
   formId: number;
@@ -40,6 +41,8 @@ export default function FormsPage() {
       fd.append('file', file);
       fd.append('formName', formName.trim());
       fd.append('paymentType', paymentType);
+      const groupId = getGroupId();
+      if (groupId) fd.append('groupId', String(groupId));
 
       const res = await apiFetch('/api/forms/upload', { method: 'POST', body: fd });
       if (res.ok) {
