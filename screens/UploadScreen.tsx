@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import HeroBand from '@/components/HeroBand';
 import { Btn, Badge, SectionHead } from '@/components/ui';
 import { apiFetch } from '@/lib/api';
+import { getGroupId } from '@/lib/group';
 
 interface PolicyFile {
   policyId: number;
@@ -45,6 +46,8 @@ export default function UploadScreen({ onNext }: UploadScreenProps) {
       const formData = new FormData();
       formData.append('file', file);
       formData.append('policyName', file.name.replace(/\.[^.]+$/, ''));
+      const groupId = getGroupId();
+      if (groupId) formData.append('groupId', String(groupId));
 
       const res = await apiFetch('/api/policies/upload', {
         method: 'POST',
