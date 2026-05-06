@@ -4,6 +4,7 @@ import React, { useState, useRef } from 'react';
 import HeroBand from '@/components/HeroBand';
 import { Btn, Badge } from '@/components/ui';
 import { apiFetch } from '@/lib/api';
+import { getGroupId } from '@/lib/group';
 
 interface AvailableForm {
   formId: number;
@@ -28,6 +29,7 @@ interface ReceiptScreenProps {
 }
 
 export default function ReceiptScreen({ onNext, onPrev, step = 5 }: ReceiptScreenProps) {
+  const [filledFields, setFilledFields] = useState<Record<string, string>>({});
   const [fields, setFields] = useState<ReceiptFields>({
     merchant: '', date: '', category: '', amount: '', note: '',
   });
@@ -38,15 +40,11 @@ export default function ReceiptScreen({ onNext, onPrev, step = 5 }: ReceiptScree
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function mapFilledFields(filledFields: Record<string, string>): Partial<ReceiptFields> {
-    const result: Partial<ReceiptFields> = {};
-    for (const [key, value] of Object.entries(filledFields)) {
-      if (/가맹점|상호|업체|매장|점포/.test(key))        result.merchant = value;
-      else if (/거래일|날짜|일시|결제일/.test(key))       result.date = value;
-      else if (/금액|합계|총액|결제금|공급가/.test(key))  result.amount = value.replace(/[^\d,]/g, '');
-      else if (/항목|목적|내용|품목|지출/.test(key))      result.category = value;
+  function extractAmount(ff: Record<string, string>): string {
+    for (const [key, value] of Object.entries(ff)) {
+      if (/금액|합계|총액|결제금|공급가/.test(key)) return value.replace(/[^\d,]/g, '');
     }
-    return result;
+    return '';
   }
 
   const tag = step === 5 ? 'STEP 3 · 증빙 업로드' : step === 6 ? 'STEP 4 · 양식 추천' : 'STEP 5 · 자동 입력';
@@ -68,7 +66,8 @@ export default function ReceiptScreen({ onNext, onPrev, step = 5 }: ReceiptScree
           sessionStorage.setItem('formId', String(firstResult.formId));
           sessionStorage.setItem('formName', firstResult.formName);
           sessionStorage.setItem('missingFields', JSON.stringify(firstResult.missingFields));
-          setFields(prev => ({ ...prev, ...mapFilledFields(firstResult.filledFields) }));
+          setFilledFields(firstResult.filledFields);
+          setFields(prev => ({ ...prev, amount: extractAmount(firstResult.filledFields), note: prev.note }));
         }
         setFilled(true);
       } else {
@@ -89,6 +88,8 @@ export default function ReceiptScreen({ onNext, onPrev, step = 5 }: ReceiptScree
     try {
       const formData = new FormData();
       formData.append('file', file);
+      const groupId = getGroupId();
+      if (groupId) formData.append('groupId', String(groupId));
 
       const res = await apiFetch('/api/evidence/analyze', {
         method: 'POST',
@@ -115,13 +116,6 @@ export default function ReceiptScreen({ onNext, onPrev, step = 5 }: ReceiptScree
       setAnalyzing(false);
     }
   }
-
-  const fieldRows = [
-    { label: '가맹점명',  key: 'merchant' as const, auto: true },
-    { label: '거래일시',  key: 'date' as const,     auto: true },
-    { label: '지출 항목', key: 'category' as const, auto: false },
-    { label: '금액',      key: 'amount' as const,   auto: true, mono: true },
-  ];
 
   return (
     <div style={{ fontFamily: 'var(--font-ui)' }}>
@@ -218,42 +212,28 @@ export default function ReceiptScreen({ onNext, onPrev, step = 5 }: ReceiptScree
 
           {/* Fields */}
           <div style={{ padding: '0 16px' }}>
-            {fieldRows.map(f => (
-              <div key={f.key} style={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '10px 0', borderBottom: '1px solid #F4F6FA',
-              }}>
-                <span style={{ fontSize: 12, color: '#8A96A8', fontWeight: 500 }}>{f.label}</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {f.auto ? (
-                    <>
-                      <span style={{
-                        fontSize: 13, fontWeight: 600, color: '#1C2B4A',
-                        fontFamily: f.mono ? 'var(--font-mono)' : 'inherit',
-                      }}>
-                        {fields[f.key] || '—'}{f.mono && fields[f.key] ? '원' : ''}
-                      </span>
-                      <Badge variant="navy">자동</Badge>
-                    </>
-                  ) : (
-                    <>
-                      <input
-                        value={fields[f.key]}
-                        onChange={e => setFields({ ...fields, [f.key]: e.target.value })}
-                        style={{
-                          width: 120, border: '1px solid #E2E7EF', borderRadius: 6,
-                          color: '#1C2B4A', fontSize: 12,
-                          fontFamily: 'var(--font-ui)',
-                          padding: '5px 8px', height: 30,
-                          background: 'white', outline: 'none',
-                        }}
-                      />
-                      <span style={{ fontSize: 11, color: '#4A6FA5', fontWeight: 600, cursor: 'pointer' }}>수정</span>
-                    </>
-                  )}
-                </div>
+            {Object.keys(filledFields).length === 0 && !filled ? (
+              <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: '#B8C2D0' }}>
+                파일을 업로드하면 자동으로 입력됩니다
               </div>
-            ))}
+            ) : Object.keys(filledFields).length === 0 && filled ? (
+              <div style={{ padding: '20px 0', textAlign: 'center', fontSize: 12, color: '#B8C2D0' }}>
+                추출된 항목이 없습니다
+              </div>
+            ) : (
+              Object.entries(filledFields).map(([key, value]) => (
+                <div key={key} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '10px 0', borderBottom: '1px solid #F4F6FA',
+                }}>
+                  <span style={{ fontSize: 12, color: '#8A96A8', fontWeight: 500 }}>{key}</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#1C2B4A' }}>{value}</span>
+                    <Badge variant="navy">자동</Badge>
+                  </div>
+                </div>
+              ))
+            )}
             <div style={{ padding: '10px 0', borderBottom: '1px solid #F4F6FA' }}>
               <div style={{ fontSize: 12, color: '#8A96A8', fontWeight: 500, marginBottom: 6 }}>비고</div>
               <input

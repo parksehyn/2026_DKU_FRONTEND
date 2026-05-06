@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import HeroBand from '@/components/HeroBand';
 import { Btn, SectionHead } from '@/components/ui';
 import { apiFetch } from '@/lib/api';
+import { getGroupId } from '@/lib/group';
 
 interface PDFScreenProps {
   onPrev?: () => void;
@@ -11,8 +12,10 @@ interface PDFScreenProps {
 
 export default function PDFScreen({ onPrev }: PDFScreenProps) {
   const [downloading, setDownloading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
+  const [submitError, setSubmitError] = useState('');
 
   const summaryRows = [
     { label: '결의서 번호', value: 'EXP-2025-0142' },
@@ -66,6 +69,47 @@ export default function PDFScreen({ onPrev }: PDFScreenProps) {
     }
   }
 
+  async function handleSubmit() {
+    const evidenceId = sessionStorage.getItem('evidenceId');
+    const formId = sessionStorage.getItem('formId');
+    const filledFieldsRaw = sessionStorage.getItem('filledFields');
+    const userInputFieldsRaw = sessionStorage.getItem('userInputFields');
+    const groupId = getGroupId();
+
+    if (!evidenceId || !formId || !groupId) {
+      setSubmitError('증빙 정보 또는 그룹 정보가 없습니다.');
+      return;
+    }
+
+    setSubmitting(true); setSubmitError('');
+    try {
+      const filledFields: Record<string, string> = filledFieldsRaw ? JSON.parse(filledFieldsRaw) : {};
+      const userInputFields: Record<string, string> = userInputFieldsRaw ? JSON.parse(userInputFieldsRaw) : {};
+      const mergedFields = { ...filledFields, ...userInputFields };
+
+      const res = await apiFetch('/api/approvals', {
+        method: 'POST',
+        body: JSON.stringify({
+          groupId,
+          evidenceId: Number(evidenceId),
+          formId: Number(formId),
+          filledFields: mergedFields,
+        }),
+      });
+
+      if (res.ok) {
+        setSubmitted(true);
+      } else {
+        const body = await res.json().catch(() => null);
+        setSubmitError(body?.error ?? '결재 제출에 실패했습니다.');
+      }
+    } catch {
+      setSubmitError('서버에 연결할 수 없습니다.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <div style={{ fontFamily: 'var(--font-ui)' }}>
       <HeroBand
@@ -75,8 +119,8 @@ export default function PDFScreen({ onPrev }: PDFScreenProps) {
         compact
         actions={<>
           <Btn variant="outline" onClick={onPrev}>이전</Btn>
-          <Btn variant="navy" onClick={() => setSubmitted(true)}>
-            {submitted ? '✓ 제출 완료' : '결재 라인 제출'}
+          <Btn variant="navy" onClick={handleSubmit} disabled={submitting || submitted}>
+            {submitted ? '✓ 제출 완료' : submitting ? '제출 중...' : '결재 라인 제출'}
           </Btn>
         </>}
       />
@@ -146,6 +190,14 @@ export default function PDFScreen({ onPrev }: PDFScreenProps) {
                 </div>
               ))}
             </div>
+
+            {submitError && (
+              <div style={{
+                fontSize: 12, color: '#C8374A',
+                background: '#FDECEA', border: '1px solid #F5C6C6',
+                borderRadius: 6, padding: '8px 12px', marginBottom: 10,
+              }}>{submitError}</div>
+            )}
 
             <div style={{
               background: submitted ? '#E8F5EE' : '#FDF5E0',
