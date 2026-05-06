@@ -27,7 +27,8 @@ export default function FormsPage() {
 
   async function loadForms() {
     try {
-      const res = await apiFetch('/api/forms');
+      const groupId = getGroupId();
+      const res = await apiFetch(`/api/forms${groupId ? `?groupId=${groupId}` : ''}`);
       if (res.ok) setForms(await res.json());
     } catch { /* 목록 로드 실패 시 빈 상태 유지 */ }
   }
