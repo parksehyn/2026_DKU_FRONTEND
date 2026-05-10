@@ -1,9 +1,5 @@
-'use client';
-
-import { useRouter } from 'next/navigation';
-import LandingScreen from '@/screens/LandingScreen';
+import { redirect } from 'next/navigation';
 
 export default function Page() {
-  const router = useRouter();
-  return <LandingScreen onStart={() => router.push('/upload')} />;
+  redirect('/login');
 }

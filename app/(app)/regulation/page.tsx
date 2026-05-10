@@ -1,7 +1,7 @@
 'use client';
 
-import UploadScreen from '@/screens/UploadScreen';
+import RegulationScreen from '@/screens/RegulationScreen';
 
 export default function Page() {
-  return <UploadScreen />;
+  return <RegulationScreen />;
 }

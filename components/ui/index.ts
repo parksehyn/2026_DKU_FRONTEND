@@ -10,3 +10,5 @@ export { default as ProgBar } from './ProgBar';
 export { default as Toggle } from './Toggle';
 export { default as RegItem } from './RegItem';
 export { default as CheckItem } from './CheckItem';
+export { default as Modal } from './Modal';
+export { default as DropZone } from './DropZone';
