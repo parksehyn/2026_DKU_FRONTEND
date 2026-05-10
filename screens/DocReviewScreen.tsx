@@ -1,116 +1,289 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import HeroBand from '@/components/HeroBand';
-import { Btn, Badge } from '@/components/ui';
+import { useRouter } from 'next/navigation';
 
-interface DocReviewScreenProps {
-  onNext?: () => void;
-  onPrev?: () => void;
+interface FieldRow {
+  key: string;
+  value: string;
+  isAi: boolean;       // AI auto-filled
+  missing: boolean;    // user must input
 }
 
-export default function DocReviewScreen({ onNext, onPrev }: DocReviewScreenProps) {
-  const [filledFields, setFilledFields] = useState<Record<string, string>>({});
-  const [missingFields, setMissingFields] = useState<string[]>([]);
-  const [userInputFields, setUserInputFields] = useState<Record<string, string>>({});
+export default function DocReviewScreen() {
+  const router = useRouter();
+  const [rows, setRows] = useState<FieldRow[]>([]);
   const [formName, setFormName] = useState('지출결의서');
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState('');
 
   useEffect(() => {
-    const filled = sessionStorage.getItem('filledFields');
-    const missing = sessionStorage.getItem('missingFields');
+    const filledRaw = sessionStorage.getItem('filledFields');
+    const missingRaw = sessionStorage.getItem('missingFields');
+    const userInputRaw = sessionStorage.getItem('userInputFields');
     const name = sessionStorage.getItem('formName');
-    if (filled) setFilledFields(JSON.parse(filled));
-    if (missing) setMissingFields(JSON.parse(missing));
     if (name) setFormName(name);
+
+    const filled: Record<string, string> = filledRaw ? JSON.parse(filledRaw) : {};
+    const missing: string[] = missingRaw ? JSON.parse(missingRaw) : [];
+    const userInput: Record<string, string> = userInputRaw ? JSON.parse(userInputRaw) : {};
+
+    const result: FieldRow[] = [];
+    for (const [k, v] of Object.entries(filled)) {
+      result.push({ key: k, value: v, isAi: true, missing: false });
+    }
+    for (const k of missing) {
+      result.push({ key: k, value: userInput[k] ?? '', isAi: false, missing: true });
+    }
+    setRows(result);
   }, []);
 
-  function handleUserInput(field: string, value: string) {
-    const updated = { ...userInputFields, [field]: value };
-    setUserInputFields(updated);
-    sessionStorage.setItem('userInputFields', JSON.stringify(updated));
+  function startEdit(row: FieldRow) {
+    setEditingKey(row.key);
+    setEditValue(row.value);
   }
 
-  const hasData = Object.keys(filledFields).length > 0 || missingFields.length > 0;
+  function commitEdit() {
+    if (editingKey == null) return;
+    setRows(prev => prev.map(r => {
+      if (r.key !== editingKey) return r;
+      const next: FieldRow = { ...r, value: editValue, isAi: false };
+      return next;
+    }));
+    // user input fields 저장 (filledFields 도 사용자가 수정 시 user override 로 분류)
+    const updated: Record<string, string> = {};
+    rows.forEach(r => { updated[r.key] = r.key === editingKey ? editValue : r.value; });
+    const userInput = JSON.parse(sessionStorage.getItem('userInputFields') ?? '{}');
+    userInput[editingKey] = editValue;
+    sessionStorage.setItem('userInputFields', JSON.stringify(userInput));
+    setEditingKey(null);
+  }
+
+  // 합계 자동 계산 (금액 필드만)
+  const sum = rows.reduce((acc, r) => {
+    const n = parseInt(r.value.replace(/[^\d-]/g, ''), 10);
+    if (!isNaN(n) && /금액|비$|료$|값$/.test(r.key)) return acc + n;
+    return acc;
+  }, 0);
+  const showSum = rows.some(r => /금액|비$|료$/.test(r.key));
+
+  const aiCount = rows.filter(r => r.isAi).length;
+  const missingCount = rows.filter(r => r.missing && !r.value).length;
 
   return (
-    <div style={{ fontFamily: 'var(--font-ui)' }}>
-      <HeroBand
-        tag="STEP 4 · 문서 확인"
-        title="초안 문서를 확인하세요"
-        desc="AI가 자동 입력한 내용을 확인하고 누락 항목을 직접 입력하세요."
-        compact
-        actions={<>
-          <Btn variant="outline" onClick={onPrev}>이전</Btn>
-          <Btn variant="navy" onClick={onNext}>규정 검사 →</Btn>
-        </>}
-      />
-      <div style={{ padding: '28px 40px', display: 'flex', justifyContent: 'center' }}>
+    <div style={{
+      display: 'grid', gridTemplateColumns: '1fr 360px',
+      minHeight: 'calc(100vh - 56px - 86px - 50px)',
+      fontFamily: 'var(--font-ui)', color: 'var(--navy)',
+    }}>
+      <div style={{ background: 'var(--bg)', padding: 28 }}>
         <div style={{
-          background: 'white', border: '1px solid #E2E7EF',
-          borderRadius: 8, padding: '24px 28px',
-          width: '100%', maxWidth: 520,
+          maxWidth: 680, margin: '0 auto 14px',
+          background: 'var(--blue-pale)', border: '1px solid #C8D6E8',
+          borderRadius: 10, padding: '12px 16px',
+          display: 'flex', alignItems: 'center', gap: 10,
+          fontSize: 12, color: 'var(--navy)',
+        }}>
+          <span style={{
+            width: 8, height: 8, borderRadius: '50%',
+            background: 'var(--navy)', animation: 'pulse 1.4s infinite',
+          }} />
+          <span><b>AI가 업로드된 증빙자료를 분석해 초안을 자동 작성했어요.</b> 셀을 클릭해 자유롭게 수정할 수 있습니다.</span>
+        </div>
+
+        <div style={{
+          background: '#fff', maxWidth: 680, margin: '0 auto',
+          borderRadius: 6, padding: '36px 40px',
+          boxShadow: '0 1px 12px rgba(0,0,0,0.08)',
         }}>
           <div style={{
-            textAlign: 'center', fontSize: 15, fontWeight: 700, color: '#1C2B4A',
-            borderBottom: '2px solid #1C2B4A', paddingBottom: 12, marginBottom: 16,
+            textAlign: 'center', fontSize: 17, fontWeight: 800,
+            color: 'var(--navy)', borderBottom: '2.5px solid var(--navy)',
+            paddingBottom: 14, marginBottom: 18, letterSpacing: '-0.3px',
           }}>{formName}</div>
 
-          {!hasData && (
-            <div style={{ textAlign: 'center', padding: '40px 0', fontSize: 13, color: '#8A96A8' }}>
+          {rows.length === 0 ? (
+            <div style={{ padding: '40px 0', textAlign: 'center', fontSize: 13, color: 'var(--gray4)' }}>
               증빙 업로드 후 자동 입력된 내용이 표시됩니다.
             </div>
-          )}
+          ) : (
+            <>
+              {Array.from({ length: Math.ceil(rows.length / 2) }).map((_, idx) => {
+                const left = rows[idx * 2];
+                const right = rows[idx * 2 + 1];
+                return (
+                  <div key={idx} style={{ display: 'flex', borderBottom: '1px solid var(--gray2)' }}>
+                    {[left, right].map((r, ci) => r ? (
+                      <React.Fragment key={r.key}>
+                        <div style={{
+                          width: 110, padding: '10px 12px', fontWeight: 600,
+                          color: 'var(--gray4)', fontSize: 11,
+                          background: 'var(--gray1)',
+                          borderRight: '1px solid var(--gray2)', flexShrink: 0,
+                        }}>{r.key}</div>
+                        <div
+                          onClick={() => startEdit(r)}
+                          style={{
+                            padding: '10px 14px', flex: 1,
+                            fontSize: 13, color: 'var(--navy)',
+                            cursor: 'pointer', transition: '.12s',
+                            position: 'relative',
+                            background: editingKey === r.key
+                              ? '#FFFDE7'
+                              : r.missing && !r.value ? '#FFFBF0' : '#fff',
+                            outline: editingKey === r.key ? '1.5px solid #F4B000' : 'none',
+                            borderRight: ci === 0 ? '1px solid var(--gray2)' : 'none',
+                          }}
+                          onMouseEnter={e => {
+                            if (editingKey !== r.key) e.currentTarget.style.background = 'var(--blue-pale)';
+                          }}
+                          onMouseLeave={e => {
+                            if (editingKey !== r.key) {
+                              e.currentTarget.style.background = r.missing && !r.value ? '#FFFBF0' : '#fff';
+                            }
+                          }}
+                        >
+                          {editingKey === r.key ? (
+                            <input
+                              autoFocus
+                              value={editValue}
+                              onChange={e => setEditValue(e.target.value)}
+                              onBlur={commitEdit}
+                              onKeyDown={e => { if (e.key === 'Enter') commitEdit(); }}
+                              style={{
+                                border: 'none', background: 'transparent',
+                                width: '100%', fontFamily: 'inherit', fontSize: 13,
+                                color: 'var(--navy)', outline: 'none',
+                              }}
+                            />
+                          ) : (
+                            <>
+                              {r.value || (r.missing ? <span style={{ color: 'var(--gray3)' }}>입력하세요</span> : '')}
+                              {r.isAi && (
+                                <span style={{
+                                  position: 'absolute', right: 10, top: '50%',
+                                  transform: 'translateY(-50%)',
+                                  fontSize: 9, fontWeight: 800, color: 'var(--blue)',
+                                  background: '#fff', padding: '2px 6px',
+                                  borderRadius: 4, border: '1px solid var(--blue-pale)',
+                                }}>AI</span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </React.Fragment>
+                    ) : (
+                      <div key={ci} style={{ flex: 1 }} />
+                    ))}
+                  </div>
+                );
+              })}
 
-          {/* 자동 입력된 필드 */}
-          {Object.entries(filledFields).map(([key, value], i) => (
-            <div key={key} style={{
-              display: 'flex',
-              borderBottom: '1px solid #E2E7EF',
-            }}>
+              {showSum && (
+                <div style={{ display: 'flex', background: 'var(--navy)' }}>
+                  <div style={{
+                    width: 110, padding: '10px 12px', fontWeight: 600,
+                    color: 'rgba(255,255,255,0.6)', fontSize: 11,
+                    background: 'transparent', borderRight: '1px solid rgba(255,255,255,0.15)',
+                    flexShrink: 0,
+                  }}>합계</div>
+                  <div style={{
+                    padding: '10px 14px', flex: 1,
+                    fontFamily: 'var(--font-mono)', fontSize: 15, fontWeight: 800, color: '#fff',
+                  }}>{sum.toLocaleString()}원</div>
+                </div>
+              )}
+
               <div style={{
-                width: 120, padding: '10px 10px', fontSize: 11, fontWeight: 600,
-                background: '#F4F6FA', color: '#8A96A8', flexShrink: 0,
-                borderRight: '1px solid #E2E7EF',
-              }}>{key}</div>
-              <div style={{
-                padding: '10px 12px', flex: 1, fontSize: 12, color: '#1C2B4A',
-                display: 'flex', alignItems: 'center', gap: 8,
+                display: 'flex', gap: 24,
+                padding: '18px 0', borderTop: '2px solid var(--navy)', marginTop: 18,
               }}>
-                {value}
-                <Badge variant="ok">자동</Badge>
+                {['신청인', '팀장', '부서장'].map((t, i) => (
+                  <div key={t} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: 'var(--gray4)' }}>
+                    {t}
+                    <div style={{
+                      marginTop: 26, borderTop: '1px solid var(--gray3)',
+                      paddingTop: 5, fontSize: 11,
+                      color: i === 0 ? 'var(--navy)' : 'var(--gray3)',
+                      fontWeight: i === 0 ? 600 : 400,
+                    }}>{i === 0 ? '홍길동' : '(미결재)'}</div>
+                  </div>
+                ))}
               </div>
-            </div>
-          ))}
+            </>
+          )}
+        </div>
+      </div>
 
-          {/* 누락 필드 — 직접 입력 */}
-          {missingFields.map((field) => (
-            <div key={field} style={{
-              display: 'flex',
-              borderBottom: '1px solid #E2E7EF',
-              background: '#FFFBF0',
+      {/* 사이드바 */}
+      <div style={{
+        background: '#fff', borderLeft: '1px solid var(--gray2)',
+        padding: 22, display: 'flex', flexDirection: 'column',
+      }}>
+        <div style={{ marginBottom: 22 }}>
+          <div style={{
+            fontSize: 10, fontWeight: 800, color: 'var(--gray4)',
+            letterSpacing: '0.6px', textTransform: 'uppercase', marginBottom: 12,
+          }}>AI 자동 입력 결과</div>
+          {[
+            { ico: 'AI', icoBg: 'var(--blue-pale)', icoColor: 'var(--blue)',
+              t: `${aiCount}개 항목 자동 추출 완료`,
+              d: '증빙에서 인식한 값을 양식에 자동 입력했습니다.',
+              titleColor: 'var(--navy)' },
+            ...(missingCount > 0 ? [{ ico: '!', icoBg: 'var(--amber-bg)', icoColor: 'var(--amber)',
+              t: `${missingCount}개 항목 입력 필요`,
+              d: '미입력된 항목을 직접 채워주세요.',
+              titleColor: 'var(--amber)' }] : []),
+          ].map((c, i) => (
+            <div key={i} style={{
+              display: 'flex', gap: 10, padding: 12, background: '#fff',
+              borderRadius: 9, border: '1px solid var(--gray2)', marginBottom: 8,
             }}>
               <div style={{
-                width: 120, padding: '10px 10px', fontSize: 11, fontWeight: 600,
-                background: '#FDF5E0', color: '#C08020', flexShrink: 0,
-                borderRight: '1px solid #F0E0B0',
-              }}>{field}</div>
-              <div style={{ padding: '6px 10px', flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input
-                  value={userInputFields[field] ?? ''}
-                  onChange={e => handleUserInput(field, e.target.value)}
-                  placeholder="직접 입력"
-                  style={{
-                    flex: 1, border: '1px solid #E2E7EF', borderRadius: 4,
-                    padding: '5px 8px', fontSize: 12, fontFamily: 'var(--font-ui)',
-                    color: '#1C2B4A', outline: 'none', height: 30,
-                  }}
-                />
-                <Badge variant="warn">누락</Badge>
+                width: 22, height: 22, borderRadius: '50%',
+                background: c.icoBg, color: c.icoColor,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 11, fontWeight: 700, flexShrink: 0, marginTop: 1,
+              }}>{c.ico}</div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: c.titleColor, marginBottom: 3 }}>{c.t}</div>
+                <div style={{ fontSize: 11, color: 'var(--gray5)', lineHeight: 1.55 }}>{c.d}</div>
               </div>
             </div>
           ))}
         </div>
+
+        <div style={{
+          fontSize: 11, color: 'var(--gray5)', lineHeight: 1.7,
+          padding: 12, background: 'var(--gray1)', borderRadius: 8, marginBottom: 18,
+        }}>
+          셀을 <strong>클릭</strong>하면 바로 편집할 수 있어요.<br />
+          <span style={{ color: 'var(--blue)', fontWeight: 700 }}>AI</span> 표시는 증빙에서 자동 추출된 값입니다.
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto' }}>
+          <button
+            onClick={() => router.push('/form-recommend')}
+            style={{
+              width: '100%', background: 'var(--gray2)', color: 'var(--gray5)',
+              border: 'none', borderRadius: 10, padding: '10px 20px',
+              fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >← 이전 단계</button>
+          <button
+            onClick={() => router.push('/compliance')}
+            style={{
+              width: '100%', background: 'var(--navy)', color: '#fff',
+              border: 'none', borderRadius: 10, padding: '10px 20px',
+              fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+            }}
+          >다음 → 규정 검토</button>
+        </div>
       </div>
+
+      <style>{`
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+      `}</style>
     </div>
   );
 }

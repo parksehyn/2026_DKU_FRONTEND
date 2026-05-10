@@ -1,29 +1,55 @@
 'use client';
 
-import React, { useState } from 'react';
-import HeroBand from '@/components/HeroBand';
-import { Btn, SectionHead } from '@/components/ui';
+import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api';
 import { getGroupId } from '@/lib/group';
 
-interface PDFScreenProps {
-  onPrev?: () => void;
+interface UploadedPhoto {
+  photoId: string;
+  filePath: string;
+  fileName: string;
+  label: string;
 }
 
-export default function PDFScreen({ onPrev }: PDFScreenProps) {
+export default function PDFScreen() {
+  const router = useRouter();
   const [downloading, setDownloading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedRequestId, setSubmittedRequestId] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [submitError, setSubmitError] = useState('');
+  const [formName, setFormName] = useState('지출결의서');
+  const [totalAmount, setTotalAmount] = useState(0);
+  const [docNumber, setDocNumber] = useState<string>('—');
 
-  const summaryRows = [
-    { label: '결의서 번호', value: 'EXP-2025-0142' },
-    { label: '신청자',      value: '김민준 (개발팀)' },
-    { label: '제출일',      value: '2025-01-17' },
-    { label: '합계 금액',   value: '655,000원', mono: true },
-    { label: '준수율',      value: '60%', mono: true, warn: true },
-  ];
+  const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
+  const [photoLabel, setPhotoLabel] = useState('사진');
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState('');
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const name = sessionStorage.getItem('formName');
+    if (name) setFormName(name);
+
+    const filledRaw = sessionStorage.getItem('filledFields');
+    const userInputRaw = sessionStorage.getItem('userInputFields');
+    const filled: Record<string, string> = filledRaw ? JSON.parse(filledRaw) : {};
+    const userInput: Record<string, string> = userInputRaw ? JSON.parse(userInputRaw) : {};
+    const merged = { ...filled, ...userInput };
+
+    const total = Object.entries(merged).reduce((acc, [k, v]) => {
+      const n = parseInt(String(v).replace(/[^\d-]/g, ''), 10);
+      if (!isNaN(n) && /금액|비$|료$|값$/.test(k)) return acc + n;
+      return acc;
+    }, 0);
+    setTotalAmount(total);
+
+    const evidenceId = sessionStorage.getItem('evidenceId');
+    if (evidenceId) setDocNumber(`#${new Date().getFullYear()}-${evidenceId.padStart(4, '0')}`);
+  }, []);
 
   async function handleDownload() {
     const evidenceId = sessionStorage.getItem('evidenceId');
@@ -35,16 +61,17 @@ export default function PDFScreen({ onPrev }: PDFScreenProps) {
       return;
     }
 
-    setDownloading(true);
-    setError('');
+    setDownloading(true); setError('');
     try {
       const filledFields: Record<string, string> = filledFieldsRaw ? JSON.parse(filledFieldsRaw) : {};
       const userInputFieldsRaw = sessionStorage.getItem('userInputFields');
       const userInputFields: Record<string, string> = userInputFieldsRaw ? JSON.parse(userInputFieldsRaw) : {};
+      const imageFields: Record<string, string> = {};
+      photos.forEach(p => { imageFields[p.label] = p.filePath; });
       const res = await apiFetch(`/api/evidence/${evidenceId}/complete`, {
         method: 'POST',
         body: JSON.stringify({
-          forms: [{ formId: Number(formId), filledFields, userInputFields }],
+          forms: [{ formId: Number(formId), filledFields, userInputFields, imageFields }],
         }),
       });
 
@@ -55,18 +82,15 @@ export default function PDFScreen({ onPrev }: PDFScreenProps) {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `지출결의서${ext}`;
+        a.download = `${formName}${ext}`;
         a.click();
         URL.revokeObjectURL(url);
       } else {
         const body = await res.json().catch(() => null);
         setError(body?.error ?? '파일 생성에 실패했습니다.');
       }
-    } catch {
-      setError('서버에 연결할 수 없습니다.');
-    } finally {
-      setDownloading(false);
-    }
+    } catch { setError('서버에 연결할 수 없습니다.'); }
+    finally { setDownloading(false); }
   }
 
   async function handleSubmit() {
@@ -98,131 +122,364 @@ export default function PDFScreen({ onPrev }: PDFScreenProps) {
       });
 
       if (res.ok) {
+        const data = await res.json().catch(() => null);
         setSubmitted(true);
-      } else {
+        if (data?.requestId) setSubmittedRequestId(data.requestId);
+      }
+      else {
         const body = await res.json().catch(() => null);
         setSubmitError(body?.error ?? '결재 제출에 실패했습니다.');
       }
-    } catch {
-      setSubmitError('서버에 연결할 수 없습니다.');
-    } finally {
-      setSubmitting(false);
-    }
+    } catch { setSubmitError('서버에 연결할 수 없습니다.'); }
+    finally { setSubmitting(false); }
+  }
+
+  async function uploadPhoto(file: File) {
+    setPhotoUploading(true); setPhotoError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('label', photoLabel.trim() || '사진');
+      const res = await apiFetch('/api/photos/upload', { method: 'POST', body: fd });
+      if (res.ok) {
+        const data: UploadedPhoto = await res.json();
+        setPhotos(prev => [...prev, data]);
+      } else {
+        const body = await res.json().catch(() => null);
+        setPhotoError(body?.error ?? '사진 업로드에 실패했습니다.');
+      }
+    } catch { setPhotoError('서버에 연결할 수 없습니다.'); }
+    finally { setPhotoUploading(false); }
+  }
+
+  async function deletePhoto(photoId: string) {
+    try {
+      const res = await apiFetch(`/api/photos/${photoId}`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        setPhotos(prev => prev.filter(p => p.photoId !== photoId));
+      }
+    } catch { /* 무시 */ }
   }
 
   return (
-    <div style={{ fontFamily: 'var(--font-ui)' }}>
-      <HeroBand
-        tag="STEP 5 · PDF 저장"
-        title="결의서를 저장·제출하세요"
-        desc="최종 검토 후 파일로 저장하거나 결재 라인에 제출합니다."
-        compact
-        actions={<>
-          <Btn variant="outline" onClick={onPrev}>이전</Btn>
-          <Btn variant="navy" onClick={handleSubmit} disabled={submitting || submitted}>
-            {submitted ? '✓ 제출 완료' : submitting ? '제출 중...' : '결재 라인 제출'}
-          </Btn>
-        </>}
-      />
-      <div style={{ padding: '28px 40px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
-          {/* Left — PDF preview card */}
-          <div>
-            <SectionHead title="파일 다운로드" />
-            <div style={{ background: 'white', borderRadius: 16, border: '1px solid #E2E7EF', overflow: 'hidden' }}>
+    <div style={{ fontFamily: 'var(--font-ui)', padding: '28px 32px', color: 'var(--navy)' }}>
+      {/* 완료 배너 */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '14px 18px',
+        background: 'var(--green-bg)', borderRadius: 10,
+        border: '1px solid rgba(58,138,92,0.18)', marginBottom: 24,
+      }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: '50%',
+          background: 'var(--green)', color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 14, fontWeight: 700, flexShrink: 0,
+        }}>✓</div>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--green)' }}>모든 규정 검사 통과</div>
+          <div style={{ fontSize: 11, color: 'var(--gray5)' }}>
+            최종 문서가 준비되었습니다. 아래에서 저장 방법을 선택하세요.
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '360px 1fr', gap: 20, alignItems: 'start' }}>
+        {/* PDF 다운로드 카드 */}
+        <div style={{
+          background: '#fff', borderRadius: 14,
+          border: '1px solid var(--gray2)', overflow: 'hidden',
+        }}>
+          <div style={{
+            background: 'var(--gray1)', height: 260,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            borderBottom: '1px solid var(--gray2)', gap: 12,
+          }}>
+            <div style={{
+              fontSize: 11, color: 'var(--gray4)',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                background: 'var(--green-bg)', color: 'var(--green)',
+              }}>규정 검사 완료</span>
+              최종본 준비됨
+            </div>
+            <div style={{
+              background: '#fff', width: 140, borderRadius: 3,
+              border: '1px solid var(--gray2)', padding: 11,
+              display: 'flex', flexDirection: 'column', gap: 4,
+            }}>
               <div style={{
-                background: '#F4F6FA', height: 260,
-                display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center',
-                borderBottom: '1px solid #E2E7EF', gap: 12,
-              }}>
-                <div style={{
-                  background: 'white', width: 140, borderRadius: 4,
-                  border: '1px solid #E2E7EF', padding: 12,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                }}>
-                  <div style={{ textAlign: 'center', fontSize: 8, fontWeight: 700, color: '#1C2B4A', borderBottom: '1.5px solid #1C2B4A', paddingBottom: 6, marginBottom: 8 }}>
-                    지출결의서
-                  </div>
-                  {[80, 60, 90, 70, 85, 75].map((w, i) => (
-                    <div key={i} style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-                      <div style={{ height: 2, background: '#E2E7EF', borderRadius: 1, width: 30, flexShrink: 0 }} />
-                      <div style={{ height: 2, background: '#B8C2D0', borderRadius: 1, width: `${w}%` }} />
-                    </div>
-                  ))}
-                </div>
-                <div style={{ fontSize: 10, color: '#8A96A8' }}>지출결의서.docx / .zip</div>
+                textAlign: 'center', fontSize: 8, fontWeight: 700,
+                color: 'var(--navy)',
+                borderBottom: '1.5px solid var(--navy)',
+                paddingBottom: 5, marginBottom: 5,
+              }}>{formName}</div>
+              <div style={{ height: 2.5, background: 'var(--gray2)', borderRadius: 1, width: '80%' }} />
+              <div style={{ height: 2.5, background: 'var(--gray2)', borderRadius: 1, width: '60%' }} />
+              <div style={{ height: 5 }} />
+              <div style={{ height: 2.5, background: 'var(--navy)', borderRadius: 1 }} />
+              <div style={{ height: 5 }} />
+              <div style={{ height: 2.5, background: 'var(--gray2)', borderRadius: 1, width: '75%' }} />
+              <div style={{ height: 14 }} />
+              <div style={{ display: 'flex', justifyContent: 'space-around' }}>
+                {[0, 1, 2].map(i => (
+                  <div key={i} style={{ width: 26, height: 18, borderTop: '1px solid var(--gray3)' }} />
+                ))}
               </div>
-
-              {error && (
-                <div style={{
-                  fontSize: 12, color: '#C8374A',
-                  background: '#FDECEA', borderBottom: '1px solid #F5C6C6',
-                  padding: '8px 16px',
-                }}>{error}</div>
-              )}
-
-              <div style={{ padding: 16, display: 'flex', gap: 8 }}>
-                <Btn variant="navy" full onClick={handleDownload}>
-                  {downloading ? '생성 중...' : '파일 다운로드'}
-                </Btn>
-              </div>
+            </div>
+            <div style={{ fontSize: 10, color: 'var(--gray4)' }}>
+              {formName.replace(/\s/g, '')}_{docNumber.replace('#', '')}.docx
             </div>
           </div>
 
-          {/* Right — Summary */}
-          <div>
-            <SectionHead title="제출 요약" />
-            <div style={{ background: 'white', border: '1px solid #E2E7EF', borderRadius: 12, padding: 20, marginBottom: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: '#1C2B4A', marginBottom: 14 }}>문서 정보</div>
-              {summaryRows.map((r, i) => (
-                <div key={i} style={{
-                  display: 'flex', justifyContent: 'space-between',
-                  padding: '8px 0',
-                  borderBottom: i < summaryRows.length - 1 ? '1px solid #F4F6FA' : 'none',
-                }}>
-                  <span style={{ fontSize: 12, color: '#8A96A8' }}>{r.label}</span>
+          {error && (
+            <div style={{
+              fontSize: 12, color: 'var(--red)',
+              background: 'var(--red-bg)', borderBottom: '1px solid #F5C6C6',
+              padding: '8px 16px',
+            }}>{error}</div>
+          )}
+
+          <div style={{ padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', marginBottom: 4 }}>저장 옵션</div>
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              style={{
+                background: 'var(--navy)', color: '#fff', border: 'none',
+                borderRadius: 6, padding: '9px 20px',
+                fontSize: 13, fontWeight: 600,
+                cursor: downloading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                opacity: downloading ? 0.7 : 1,
+              }}
+            >{downloading ? '생성 중...' : '문서 다운로드'}</button>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || submitted}
+              style={{
+                background: submitted ? 'var(--green)' : 'transparent',
+                color: submitted ? '#fff' : 'var(--navy)',
+                border: submitted ? 'none' : '1.5px solid var(--navy)',
+                borderRadius: 6, padding: '9px 20px',
+                fontSize: 13, fontWeight: 600,
+                cursor: (submitting || submitted) ? 'default' : 'pointer',
+                fontFamily: 'inherit',
+                opacity: submitting ? 0.7 : 1,
+              }}
+            >{submitted ? '제출 완료' : submitting ? '제출 중...' : '결재 시스템으로 제출'}</button>
+            <button style={{
+              background: 'var(--gray2)', color: 'var(--gray5)', border: 'none',
+              borderRadius: 6, padding: '9px 20px',
+              fontSize: 13, fontWeight: 600,
+              cursor: 'pointer', fontFamily: 'inherit',
+            }}>이메일로 전송</button>
+          </div>
+        </div>
+
+        {/* 우측 정보 카드들 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* 사진 첨부 (선택) */}
+          <div style={{
+            background: '#fff', borderRadius: 12,
+            border: '1px solid var(--gray2)', padding: '18px 20px',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)', marginBottom: 4 }}>
+              사진 첨부 <span style={{ fontWeight: 400, color: 'var(--gray4)', fontSize: 11 }}>(선택)</span>
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--gray5)', marginBottom: 12 }}>
+              학생증·도장·서명 등 양식지에 들어갈 사진. 라벨은 양식의 사진 필드명과 일치해야 합니다.
+            </div>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp,image/gif"
+              style={{ display: 'none' }}
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) uploadPhoto(file);
+                e.target.value = '';
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <input
+                value={photoLabel}
+                onChange={e => setPhotoLabel(e.target.value)}
+                placeholder="라벨 (예: 학생증, 도장)"
+                style={{
+                  flex: 1, border: '1px solid var(--gray2)', borderRadius: 6,
+                  padding: '7px 10px', fontSize: 12, fontFamily: 'inherit',
+                  color: 'var(--navy)', outline: 'none', height: 32,
+                }}
+              />
+              <button
+                onClick={() => photoInputRef.current?.click()}
+                disabled={photoUploading}
+                style={{
+                  background: 'var(--navy)', color: '#fff', border: 'none',
+                  borderRadius: 6, padding: '0 14px', fontSize: 11, fontWeight: 600,
+                  cursor: photoUploading ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                  opacity: photoUploading ? 0.7 : 1,
+                }}
+              >{photoUploading ? '업로드 중' : '+ 사진 선택'}</button>
+            </div>
+            {photoError && (
+              <div style={{
+                fontSize: 11, color: 'var(--red)',
+                background: 'var(--red-bg)', border: '1px solid #F5C6C6',
+                borderRadius: 6, padding: '6px 10px', marginBottom: 8,
+              }}>{photoError}</div>
+            )}
+            {photos.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {photos.map(p => (
+                  <div key={p.photoId} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    background: 'var(--gray1)', borderRadius: 6,
+                    padding: '8px 10px',
+                  }}>
+                    <div style={{
+                      width: 28, height: 32, background: 'var(--blue-pale)',
+                      color: 'var(--blue)', borderRadius: 4,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 9, fontWeight: 700, flexShrink: 0,
+                    }}>IMG</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 12, fontWeight: 600, color: 'var(--navy)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{p.fileName}</div>
+                      <div style={{ fontSize: 10, color: 'var(--gray4)' }}>라벨: {p.label}</div>
+                    </div>
+                    <button
+                      onClick={() => deletePhoto(p.photoId)}
+                      style={{
+                        background: 'none', border: 'none', color: 'var(--gray3)',
+                        cursor: 'pointer', fontSize: 14, fontFamily: 'inherit',
+                      }}
+                    >✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{
+            background: '#fff', borderRadius: 12,
+            border: '1px solid var(--gray2)', padding: '18px 20px',
+          }}>
+            <div style={{
+              fontSize: 13, fontWeight: 700, color: 'var(--navy)', marginBottom: 12,
+            }}>
+              최종 검토 요약
+              <span style={{
+                display: 'inline-flex', alignItems: 'center', gap: 3,
+                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+                background: 'var(--green-bg)', color: 'var(--green)',
+                marginLeft: 6,
+              }}>통과</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                '한도 규정 준수',
+                '증빙 자료 첨부 완료',
+                '필수 항목 입력 완료',
+                '결재 라인 설정 완료',
+              ].map(t => (
+                <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+                  <span style={{ color: 'var(--green)', fontWeight: 700 }}>✓</span>
+                  <span style={{ color: 'var(--gray5)' }}>{t}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{
+            background: '#fff', borderRadius: 12,
+            border: '1px solid var(--gray2)', padding: '18px 20px',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)', marginBottom: 12 }}>문서 정보</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {[
+                { label: '문서 번호', value: docNumber, mono: true },
+                { label: '생성 일시', value: new Date().toLocaleString('ko-KR') },
+                { label: '신청자',    value: '홍길동 · 재무팀' },
+                { label: '총 금액',   value: `${totalAmount.toLocaleString()}원`, mono: true, bold: true },
+              ].map(r => (
+                <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                  <span style={{ color: 'var(--gray4)' }}>{r.label}</span>
                   <span style={{
-                    fontSize: 12, fontWeight: 600,
-                    color: r.warn ? '#C08020' : '#1C2B4A',
+                    color: 'var(--navy)',
                     fontFamily: r.mono ? 'var(--font-mono)' : 'inherit',
+                    fontWeight: r.bold ? 700 : 600,
                   }}>{r.value}</span>
                 </div>
               ))}
             </div>
+          </div>
 
-            {submitError && (
-              <div style={{
-                fontSize: 12, color: '#C8374A',
-                background: '#FDECEA', border: '1px solid #F5C6C6',
-                borderRadius: 6, padding: '8px 12px', marginBottom: 10,
-              }}>{submitError}</div>
-            )}
-
+          {submitError && (
             <div style={{
-              background: submitted ? '#E8F5EE' : '#FDF5E0',
-              border: `1px solid ${submitted ? '#3A8A5C' : '#C08020'}`,
-              borderRadius: 12, padding: 16,
+              fontSize: 12, color: 'var(--red)',
+              background: 'var(--red-bg)', border: '1px solid #F5C6C6',
+              borderRadius: 6, padding: '8px 12px',
+            }}>{submitError}</div>
+          )}
+
+          {submitted && submittedRequestId != null && (
+            <div style={{
+              background: 'var(--green-bg)', border: '1px solid #B8DAC4',
+              borderRadius: 12, padding: '14px 18px',
+              display: 'flex', alignItems: 'center', gap: 10,
             }}>
-              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                <div style={{
-                  width: 32, height: 32, borderRadius: '50%',
-                  background: submitted ? '#3A8A5C' : '#C08020',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'white', fontSize: 14, fontWeight: 700, flexShrink: 0,
-                }}>{submitted ? '✓' : '!'}</div>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: submitted ? '#3A8A5C' : '#C08020' }}>
-                    {submitted ? '제출 완료' : '주의 사항 있음'}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#5A6475', marginTop: 2 }}>
-                    {submitted
-                      ? '결재 라인에 성공적으로 제출되었습니다.'
-                      : '규정 위반 항목이 포함된 상태로 제출됩니다.'}
-                  </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--green)', marginBottom: 3 }}>
+                  결재 요청 완료
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--gray5)' }}>
+                  결재 진행 상황을 확인할 수 있습니다.
                 </div>
               </div>
+              <button
+                onClick={() => router.push(`/approvals/${submittedRequestId}`)}
+                style={{
+                  background: 'var(--navy)', color: '#fff', border: 'none',
+                  borderRadius: 6, padding: '7px 14px', fontSize: 12, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}
+              >결재 상세 →</button>
             </div>
+          )}
+
+          <div style={{
+            background: 'var(--blue-pale)',
+            border: '1px solid #C8D6E8', borderRadius: 12,
+            padding: '18px 20px',
+          }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--navy)', marginBottom: 5 }}>새 문서 작성</div>
+            <div style={{ fontSize: 11, color: 'var(--gray5)', marginBottom: 10 }}>
+              같은 사업의 다른 지출결의서를 작성하시겠습니까?
+            </div>
+            <button
+              onClick={() => router.push('/receipt')}
+              style={{
+                background: 'var(--navy)', color: '#fff', border: 'none',
+                borderRadius: 6, padding: '5px 13px', fontSize: 11, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >+ 새 문서 작성</button>
+            <button
+              onClick={() => router.push('/expense-board')}
+              style={{
+                marginLeft: 8,
+                background: 'var(--gray2)', color: 'var(--gray5)', border: 'none',
+                borderRadius: 6, padding: '5px 13px', fontSize: 11, fontWeight: 600,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}
+            >목록으로</button>
           </div>
         </div>
       </div>

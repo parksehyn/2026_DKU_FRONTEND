@@ -5,5 +5,5 @@ import DashboardScreen from '@/screens/DashboardScreen';
 
 export default function DashboardPage() {
   const router = useRouter();
-  return <DashboardScreen onNew={() => router.push('/upload')} />;
+  return <DashboardScreen onNew={() => router.push('/receipt')} />;
 }
