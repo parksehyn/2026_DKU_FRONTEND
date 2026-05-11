@@ -244,7 +244,7 @@ export default function PDFScreen() {
               </div>
             </div>
             <div style={{ fontSize: 10, color: 'var(--gray4)' }}>
-              {formName.replace(/\s/g, '')}_{docNumber.replace('#', '')}.docx
+              {formName.replace(/\s/g, '')}_{docNumber.replace('#', '')}
             </div>
           </div>
 
