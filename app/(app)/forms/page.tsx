@@ -90,7 +90,7 @@ export default function FormsPage() {
       <input
         ref={fileInputRef}
         type="file"
-        accept=".pdf,.doc,.docx,.hwp,.hwpx"
+        accept=".pdf,.doc,.docx,.hwp,.hwpx,.xls,.xlsx"
         style={{ display: 'none' }}
         onChange={e => {
           const file = e.target.files?.[0];
@@ -139,7 +139,7 @@ export default function FormsPage() {
                 {uploading ? '업로드 중...' : '양식지 파일 업로드'}
               </div>
               <div style={{ fontSize: 11, color: 'var(--gray4)', marginBottom: 14 }}>
-                HWP, DOCX, PDF · 최대 20MB
+                HWP, DOCX, XLSX, PDF · 최대 20MB
               </div>
               <button
                 onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
