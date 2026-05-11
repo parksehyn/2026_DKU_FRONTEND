@@ -93,7 +93,7 @@ export default function RegulationScreen() {
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.doc,.docx,.hwp,.hwpx"
+          accept=".pdf,.doc,.docx,.hwp,.hwpx,.xls,.xlsx"
           style={{ display: 'none' }}
           onChange={e => {
             const file = e.target.files?.[0];
@@ -151,7 +151,7 @@ export default function RegulationScreen() {
               {uploading ? '업로드 중...' : dragging ? '파일을 놓아주세요' : '규정 문서를 드래그하거나 클릭하여 업로드'}
             </div>
             <div style={{ fontSize: 12, color: 'var(--gray4)', marginBottom: 16 }}>
-              PDF, Word(.docx), 한글(.hwp) · 최대 50MB
+              PDF, Word(.docx), Excel(.xlsx), 한글(.hwp) · 최대 50MB
             </div>
             <button
               onClick={e => { e.stopPropagation(); fileInputRef.current?.click(); }}
