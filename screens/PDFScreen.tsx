@@ -12,6 +12,15 @@ interface UploadedPhoto {
   label: string;
 }
 
+function parseFilenameFromContentDisposition(cd: string): string | null {
+  const mStar = cd.match(/filename\*=UTF-8''([^;]+)/i);
+  if (mStar) {
+    try { return decodeURIComponent(mStar[1]); } catch { return mStar[1]; }
+  }
+  const mPlain = cd.match(/filename="?([^";]+)"?/i);
+  return mPlain ? mPlain[1] : null;
+}
+
 export default function PDFScreen() {
   const router = useRouter();
   const [downloading, setDownloading] = useState(false);
@@ -77,8 +86,11 @@ export default function PDFScreen() {
 
       if (res.ok) {
         const blob = await res.blob();
+        const cd = res.headers.get('content-disposition') ?? '';
+        const cdName = parseFilenameFromContentDisposition(cd);
+        const cdExt = cdName?.match(/\.[a-z0-9]+$/i)?.[0] ?? '';
         const contentType = res.headers.get('content-type') ?? '';
-        const ext = contentType.includes('zip') ? '.zip' : '.docx';
+        const ext = contentType.includes('zip') ? '.zip' : (cdExt || '.docx');
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
