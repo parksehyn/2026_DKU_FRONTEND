@@ -87,7 +87,7 @@ export default function ReceiptScreen() {
         ref={fileInputRef}
         type="file"
         multiple
-        accept=".pdf,.jpg,.jpeg,.png"
+        accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
         style={{ display: 'none' }}
         onChange={e => { handlePicked(e.target.files); e.target.value = ''; }}
       />
@@ -198,7 +198,7 @@ export default function ReceiptScreen() {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             gap: 18, marginTop: 24, fontSize: 11, color: 'var(--gray4)',
           }}>
-            {['PDF', 'JPG / JPEG', 'PNG'].map(t => (
+            {['PDF', 'JPG / JPEG', 'PNG', 'XLS / XLSX'].map(t => (
               <span key={t} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '5px 11px', background: '#fff',
