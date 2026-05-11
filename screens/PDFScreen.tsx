@@ -76,6 +76,12 @@ export default function PDFScreen() {
       const userInputFieldsRaw = sessionStorage.getItem('userInputFields');
       const userInputFields: Record<string, string> = userInputFieldsRaw ? JSON.parse(userInputFieldsRaw) : {};
       const imageFields: Record<string, string> = {};
+      // 증빙서류 자체를 사진란에 자동 부착.
+      // - 백엔드 resolveImageBytes는 source="evidence"를 evidence 파일 바이트로 로드.
+      // - evidence가 이미지가 아니면(XLS/PDF 등) 백엔드가 자동으로 무시.
+      // - 필드명 "영수증"으로 보내면 양식의 "영수증 부착(...)" 셀에 우선 매칭(백엔드 Pass 2a).
+      imageFields['영수증'] = 'evidence';
+      // 사용자가 PhotoScreen에서 올린 사진(예: 학생증)도 함께. 같은 키면 사용자 입력이 덮어씀.
       photos.forEach(p => { imageFields[p.label] = p.filePath; });
       const res = await apiFetch(`/api/evidence/${evidenceId}/complete`, {
         method: 'POST',
