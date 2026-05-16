@@ -447,7 +447,7 @@ export default function PDFScreen() {
             }}>{submitError}</div>
           )}
 
-          {submitted && submittedRequestId != null && (
+          {submitted && (
             <div style={{
               background: 'var(--green-bg)', border: '1px solid #B8DAC4',
               borderRadius: 12, padding: '14px 18px',
@@ -458,17 +458,30 @@ export default function PDFScreen() {
                   결재 요청 완료
                 </div>
                 <div style={{ fontSize: 11, color: 'var(--gray5)' }}>
-                  결재 진행 상황을 확인할 수 있습니다.
+                  결재 목록에서 진행 상황을 확인할 수 있습니다.
                 </div>
               </div>
-              <button
-                onClick={() => router.push(`/approvals/${submittedRequestId}`)}
-                style={{
-                  background: 'var(--navy)', color: '#fff', border: 'none',
-                  borderRadius: 6, padding: '7px 14px', fontSize: 12, fontWeight: 600,
-                  cursor: 'pointer', fontFamily: 'inherit',
-                }}
-              >결재 상세 →</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {submittedRequestId != null && (
+                  <button
+                    onClick={() => router.push(`/approvals/${submittedRequestId}`)}
+                    style={{
+                      background: 'var(--navy)', color: '#fff', border: 'none',
+                      borderRadius: 6, padding: '7px 14px', fontSize: 12, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: 'inherit',
+                    }}
+                  >결재 상세 →</button>
+                )}
+                <button
+                  onClick={() => router.push('/approvals')}
+                  style={{
+                    background: 'transparent', color: 'var(--navy)',
+                    border: '1px solid var(--navy)',
+                    borderRadius: 6, padding: '7px 14px', fontSize: 12, fontWeight: 600,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                  }}
+                >결재 목록 보기</button>
+              </div>
             </div>
           )}
 
