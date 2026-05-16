@@ -18,7 +18,7 @@ interface AuthResponse {
 }
 
 export default function LoginScreen({ onLogin }: LoginScreenProps) {
-  const [tab, setTab] = useState<Tab>('signup');
+  const [tab, setTab] = useState<Tab>('login');
 
   const [loginForm, setLoginForm] = useState({ email: '', password: '' });
   const [signupForm, setSignupForm] = useState({ name: '', email: '', company: '', password: '' });
@@ -199,7 +199,7 @@ export default function LoginScreen({ onLogin }: LoginScreenProps) {
           }}>
             {/* 탭 */}
             <div style={{ display: 'flex', borderBottom: '1px solid var(--gray2)', marginBottom: 24 }}>
-              {(['signup', 'login'] as const).map(t => (
+              {(['login', 'signup'] as const).map(t => (
                 <button
                   key={t}
                   onClick={() => switchTab(t)}

@@ -7,8 +7,10 @@ import { getGroupId } from '@/lib/group';
 interface FormItem {
   formId: number;
   formName: string;
+  description?: string;
   paymentType: string;
   fields: string[];
+  generatedFields?: string[];
   createdAt: string;
   fileName?: string;
   active?: boolean;
@@ -48,6 +50,9 @@ export default function FormsPage() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editTarget, setEditTarget] = useState<FormItem | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => { loadForms(); }, []);
 
@@ -78,6 +83,28 @@ export default function FormsPage() {
       }
     } catch { setError('서버에 연결할 수 없습니다.'); }
     finally { setUploading(false); }
+  }
+
+  async function handleDelete(formId: number) {
+    if (!confirm('양식지를 삭제하시겠습니까?')) return;
+    const res = await apiFetch(`/api/forms/${formId}`, { method: 'DELETE' });
+    if (res.status === 204 || res.ok) setForms(prev => prev.filter(f => f.formId !== formId));
+  }
+
+  async function handleEditSave() {
+    if (!editTarget || !editName.trim()) return;
+    setEditSaving(true);
+    try {
+      const res = await apiFetch(`/api/forms/${editTarget.formId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ formName: editName.trim() }),
+      });
+      if (res.ok) {
+        const updated: FormItem = await res.json();
+        setForms(prev => prev.map(f => f.formId === updated.formId ? updated : f));
+        setEditTarget(null);
+      }
+    } finally { setEditSaving(false); }
   }
 
   return (
@@ -213,12 +240,22 @@ export default function FormsPage() {
                       background: active ? 'var(--green-bg)' : 'var(--gray2)',
                       color: active ? 'var(--green)' : 'var(--gray4)',
                     }}>{active ? '활성' : '비활성'}</span>
-                    <button style={{
-                      background: 'var(--gray2)', color: 'var(--gray5)',
-                      border: 'none', borderRadius: 6,
-                      padding: '5px 13px', fontSize: 11, fontWeight: 600,
-                      cursor: 'pointer', fontFamily: 'inherit',
-                    }}>수정</button>
+                    <button
+                      onClick={e => { e.stopPropagation(); setEditTarget(f); setEditName(f.formName); }}
+                      style={{
+                        background: 'var(--gray2)', color: 'var(--gray5)',
+                        border: 'none', borderRadius: 6,
+                        padding: '5px 13px', fontSize: 11, fontWeight: 600,
+                        cursor: 'pointer', fontFamily: 'inherit',
+                      }}>수정</button>
+                    <button
+                      onClick={e => { e.stopPropagation(); handleDelete(f.formId); }}
+                      style={{
+                        background: 'var(--red-bg)', color: 'var(--red)',
+                        border: 'none', borderRadius: 6,
+                        padding: '5px 13px', fontSize: 11, fontWeight: 600,
+                        cursor: 'pointer', fontFamily: 'inherit',
+                      }}>삭제</button>
                   </div>
                 );
               })
@@ -254,6 +291,50 @@ export default function FormsPage() {
           </div>
         </div>
       </div>
+
+      {/* 수정 모달 */}
+      {editTarget && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500,
+        }} onClick={() => setEditTarget(null)}>
+          <div style={{
+            background: '#fff', borderRadius: 12, padding: 24, width: 360,
+            boxShadow: '0 12px 32px rgba(28,43,74,.18)',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--navy)', marginBottom: 16 }}>양식지 이름 수정</div>
+            <input
+              style={{
+                width: '100%', border: '1px solid var(--gray2)', borderRadius: 6,
+                padding: '9px 12px', fontSize: 13, fontFamily: 'inherit',
+                color: 'var(--navy)', outline: 'none', marginBottom: 16,
+              }}
+              value={editName}
+              onChange={e => setEditName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleEditSave()}
+              autoFocus
+            />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setEditTarget(null)}
+                style={{
+                  flex: 1, background: 'var(--gray2)', color: 'var(--gray5)',
+                  border: 'none', borderRadius: 6, padding: '9px 0',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                }}>취소</button>
+              <button
+                onClick={handleEditSave}
+                disabled={editSaving || !editName.trim()}
+                style={{
+                  flex: 1, background: 'var(--navy)', color: '#fff',
+                  border: 'none', borderRadius: 6, padding: '9px 0',
+                  fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                  opacity: editSaving || !editName.trim() ? 0.5 : 1,
+                }}>{editSaving ? '저장 중...' : '저장'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
