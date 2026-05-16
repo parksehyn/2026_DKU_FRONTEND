@@ -6,31 +6,35 @@ import { Modal } from '@/components/ui';
 import { apiFetch } from '@/lib/api';
 import { getGroupId } from '@/lib/group';
 
-type BizBadge = 'draft' | 'done' | 'review' | 'empty';
+type EvidenceStatus = 'draft' | 'in_progress' | 'approved' | 'rejected';
 
 interface EvidenceItem {
   evidenceId: number;
   businessName: string;
-  status: string;
-  totalAmount?: number;
-  updatedAt?: string;
+  status: EvidenceStatus;
+  totalAmount: number | null;
+  updatedAt: string | null;
 }
 
 interface Biz {
   no: string;
   name: string;
-  badge: BizBadge;
+  badgeLabel: string;
+  badgeBg: string;
+  badgeColor: string;
   count: string;
   amount: string;
   modified: string;
 }
 
-const BADGE_CFG: Record<BizBadge, { label: string; bg: string; color: string }> = {
-  draft:  { label: '초안 작성중', bg: 'var(--amber-bg)',  color: 'var(--amber)' },
-  done:   { label: '완료',        bg: 'var(--green-bg)',  color: 'var(--green)' },
-  review: { label: '검토중',      bg: 'var(--blue-pale)', color: 'var(--blue)'  },
-  empty:  { label: '작성 전',     bg: 'var(--amber-bg)',  color: 'var(--amber)' },
+const STATUS_CFG: Record<EvidenceStatus, { label: string; bg: string; color: string }> = {
+  draft:       { label: '작성 중',    bg: 'var(--amber-bg)',  color: 'var(--amber)' },
+  in_progress: { label: '결재 진행중', bg: 'var(--blue-pale)', color: 'var(--blue)'  },
+  approved:    { label: '결재 완료',  bg: 'var(--green-bg)',  color: 'var(--green)' },
+  rejected:    { label: '반려됨',     bg: '#FEE8E8',          color: 'var(--red)'   },
 };
+
+const FALLBACK_STATUS = { label: '-', bg: 'var(--gray1)', color: 'var(--gray4)' };
 
 function groupByBusinessName(items: EvidenceItem[]): Biz[] {
   const map = new Map<string, EvidenceItem[]>();
@@ -39,16 +43,27 @@ function groupByBusinessName(items: EvidenceItem[]): Biz[] {
     if (!map.has(key)) map.set(key, []);
     map.get(key)!.push(item);
   }
+
   return Array.from(map.entries()).map(([name, list], i) => {
-    const total = list.reduce((sum, e) => sum + (e.totalAmount ?? 0), 0);
-    const latest = list.map(e => e.updatedAt ?? '').sort().at(-1) ?? '-';
+    // 가장 최근 상태로 배지 결정
+    const latest = list.sort((a, b) =>
+      (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '')
+    )[0];
+    const cfg = STATUS_CFG[latest.status] ?? FALLBACK_STATUS;
+
+    const modified = latest.updatedAt
+      ? latest.updatedAt.slice(0, 10).replace(/-/g, '.')
+      : '-';
+
     return {
       no: String(i + 1).padStart(3, '0'),
       name,
-      badge: 'empty' as BizBadge,
+      badgeLabel: cfg.label,
+      badgeBg: cfg.bg,
+      badgeColor: cfg.color,
       count: `${list.length}건`,
-      amount: total > 0 ? `₩${total.toLocaleString()}` : '-',
-      modified: latest !== '-' ? latest.slice(0, 10).replace(/-/g, '.') : '-',
+      amount: '-', // totalAmount 항상 null — 백엔드 추후 지원 예정
+      modified,
     };
   });
 }
@@ -136,40 +151,37 @@ export default function ExpenseBoardScreen() {
           <div style={{ padding: '32px 20px', textAlign: 'center', fontSize: 13, color: 'var(--gray4)' }}>
             등록된 사업이 없습니다
           </div>
-        ) : bizList.map((b, i) => {
-          const badgeCfg = BADGE_CFG[b.badge];
-          return (
-            <div
-              key={b.name}
-              onClick={() => selectBiz(b)}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '60px 1fr 120px 80px 130px 100px',
-                alignItems: 'center', gap: 12,
-                padding: '14px 20px',
-                borderBottom: i === bizList.length - 1 ? 'none' : '1px solid var(--gray1)',
-                cursor: 'pointer', transition: 'background .12s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'var(--blue-pale)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-            >
-              <div style={{ fontSize: 11, color: 'var(--gray4)' }}>{b.no}</div>
-              <div>
-                <strong style={{ fontSize: 13 }}>{b.name}</strong>
-              </div>
-              <div>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center',
-                  background: badgeCfg.bg, color: badgeCfg.color,
-                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
-                }}>{badgeCfg.label}</span>
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--gray5)' }}>{b.count}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{b.amount}</div>
-              <div style={{ fontSize: 11, color: 'var(--gray4)' }}>{b.modified}</div>
+        ) : bizList.map((b, i) => (
+          <div
+            key={b.name}
+            onClick={() => selectBiz(b)}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '60px 1fr 120px 80px 130px 100px',
+              alignItems: 'center', gap: 12,
+              padding: '14px 20px',
+              borderBottom: i === bizList.length - 1 ? 'none' : '1px solid var(--gray1)',
+              cursor: 'pointer', transition: 'background .12s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'var(--blue-pale)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+          >
+            <div style={{ fontSize: 11, color: 'var(--gray4)' }}>{b.no}</div>
+            <div>
+              <strong style={{ fontSize: 13 }}>{b.name}</strong>
             </div>
-          );
-        })}
+            <div>
+              <span style={{
+                display: 'inline-flex', alignItems: 'center',
+                background: b.badgeBg, color: b.badgeColor,
+                fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
+              }}>{b.badgeLabel}</span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--gray5)' }}>{b.count}</div>
+            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--gray4)' }}>{b.amount}</div>
+            <div style={{ fontSize: 11, color: 'var(--gray4)' }}>{b.modified}</div>
+          </div>
+        ))}
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} width={400}>
