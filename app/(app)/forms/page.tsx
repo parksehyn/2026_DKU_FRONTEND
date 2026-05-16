@@ -7,8 +7,10 @@ import { getGroupId } from '@/lib/group';
 interface FormItem {
   formId: number;
   formName: string;
+  description?: string;
   paymentType: string;
   fields: string[];
+  generatedFields?: string[];
   createdAt: string;
   fileName?: string;
   active?: boolean;
@@ -86,7 +88,7 @@ export default function FormsPage() {
   async function handleDelete(formId: number) {
     if (!confirm('양식지를 삭제하시겠습니까?')) return;
     const res = await apiFetch(`/api/forms/${formId}`, { method: 'DELETE' });
-    if (res.ok) setForms(prev => prev.filter(f => f.formId !== formId));
+    if (res.status === 204 || res.ok) setForms(prev => prev.filter(f => f.formId !== formId));
   }
 
   async function handleEditSave() {
@@ -98,9 +100,8 @@ export default function FormsPage() {
         body: JSON.stringify({ formName: editName.trim() }),
       });
       if (res.ok) {
-        setForms(prev => prev.map(f =>
-          f.formId === editTarget.formId ? { ...f, formName: editName.trim() } : f
-        ));
+        const updated: FormItem = await res.json();
+        setForms(prev => prev.map(f => f.formId === updated.formId ? updated : f));
         setEditTarget(null);
       }
     } finally { setEditSaving(false); }
