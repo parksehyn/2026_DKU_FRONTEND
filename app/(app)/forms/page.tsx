@@ -17,16 +17,12 @@ interface FormItem {
 }
 
 interface RecentReport {
+  evidenceId: number;
   title: string;
   createdAt: string;
-  meta: string;
+  fileType: string | null;
+  itemCount: number | null;
 }
-
-const MOCK_REPORTS: RecentReport[] = [
-  { title: '2024년 12월 지출결의 보고서', createdAt: '2024.12.10', meta: 'PDF · 27건' },
-  { title: 'Q4 지출 분석 리포트',         createdAt: '2024.12.08', meta: 'XLSX' },
-  { title: '11월 출장비 정산 내역',       createdAt: '2024.11.30', meta: 'PDF · 15건' },
-];
 
 const EXT_COLORS: Record<string, { bg: string; color: string }> = {
   PDF:  { bg: 'var(--red-bg)',     color: 'var(--red)'  },
@@ -53,8 +49,37 @@ export default function FormsPage() {
   const [editTarget, setEditTarget] = useState<FormItem | null>(null);
   const [editName, setEditName] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  const [reports, setReports] = useState<RecentReport[]>([]);
+  const [downloading, setDownloading] = useState<number | null>(null);
 
-  useEffect(() => { loadForms(); }, []);
+  useEffect(() => { loadForms(); loadReports(); }, []);
+
+  async function loadReports() {
+    try {
+      const groupId = getGroupId();
+      const res = await apiFetch(`/api/evidence/list?status=approved${groupId ? `&groupId=${groupId}` : ''}`);
+      if (res.ok) setReports(await res.json());
+    } catch { /* 빈 상태 유지 */ }
+  }
+
+  async function handleReportDownload(evidenceId: number) {
+    setDownloading(evidenceId);
+    try {
+      const res = await apiFetch(`/api/evidence/${evidenceId}/complete`, { method: 'POST', body: JSON.stringify({ forms: [] }) });
+      if (res.ok) {
+        const blob = await res.blob();
+        const cd = res.headers.get('content-disposition') ?? '';
+        const mStar = cd.match(/filename\*=UTF-8''([^;]+)/i);
+        const mPlain = cd.match(/filename="?([^";]+)"?/i);
+        const filename = mStar ? decodeURIComponent(mStar[1]) : (mPlain?.[1] ?? `문서_${evidenceId}`);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch { /* 무시 */ }
+    finally { setDownloading(null); }
+  }
 
   async function loadForms() {
     try {
@@ -266,29 +291,44 @@ export default function FormsPage() {
         {/* 우: 최근 생성 보고서 */}
         <div style={{ background: '#fff', borderRadius: 12, border: '1px solid var(--gray2)', padding: '20px 22px' }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--navy)', marginBottom: 14 }}>최근 생성 보고서</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {MOCK_REPORTS.map((r, i) => (
-              <div key={i} style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: 12, background: 'var(--gray1)', borderRadius: 9,
-              }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{
-                    fontSize: 12, fontWeight: 600, color: 'var(--navy)',
-                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                  }}>{r.title}</div>
-                  <div style={{ fontSize: 10, color: 'var(--gray4)', marginTop: 2 }}>
-                    생성일 {r.createdAt} · {r.meta}
+          {reports.length === 0 ? (
+            <div style={{ fontSize: 12, color: 'var(--gray4)', padding: '16px 0', textAlign: 'center' }}>
+              완료된 보고서가 없습니다.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {reports.map(r => {
+                const meta = [r.fileType, r.itemCount != null ? `${r.itemCount}건` : null].filter(Boolean).join(' · ');
+                return (
+                  <div key={r.evidenceId} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: 12, background: 'var(--gray1)', borderRadius: 9,
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontSize: 12, fontWeight: 600, color: 'var(--navy)',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>{r.title}</div>
+                      <div style={{ fontSize: 10, color: 'var(--gray4)', marginTop: 2 }}>
+                        생성일 {formatDate(r.createdAt)}{meta ? ` · ${meta}` : ''}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleReportDownload(r.evidenceId)}
+                      disabled={downloading === r.evidenceId}
+                      style={{
+                        background: 'var(--navy)', color: '#fff', border: 'none',
+                        borderRadius: 6, padding: '5px 13px', fontSize: 11, fontWeight: 600,
+                        cursor: downloading === r.evidenceId ? 'not-allowed' : 'pointer',
+                        fontFamily: 'inherit', flexShrink: 0,
+                        opacity: downloading === r.evidenceId ? 0.7 : 1,
+                      }}
+                    >{downloading === r.evidenceId ? '생성 중...' : '다운로드'}</button>
                   </div>
-                </div>
-                <button style={{
-                  background: 'var(--navy)', color: '#fff', border: 'none',
-                  borderRadius: 6, padding: '5px 13px', fontSize: 11, fontWeight: 600,
-                  cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
-                }}>다운로드</button>
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
