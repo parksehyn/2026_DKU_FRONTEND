@@ -1,17 +1,24 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Modal } from '@/components/ui';
+import { apiFetch } from '@/lib/api';
+import { getGroupId } from '@/lib/group';
 
-type BizState = 'inProgress' | 'done' | 'review';
 type BizBadge = 'draft' | 'done' | 'review' | 'empty';
+
+interface EvidenceItem {
+  evidenceId: number;
+  businessName: string;
+  status: string;
+  totalAmount?: number;
+  updatedAt?: string;
+}
 
 interface Biz {
   no: string;
   name: string;
-  desc: string;
-  state: BizState;
   badge: BizBadge;
   count: string;
   amount: string;
@@ -25,42 +32,50 @@ const BADGE_CFG: Record<BizBadge, { label: string; bg: string; color: string }> 
   empty:  { label: '작성 전',     bg: 'var(--amber-bg)',  color: 'var(--amber)' },
 };
 
-const STATE_TAG: Record<BizState, { label: string; bg: string; color: string }> = {
-  inProgress: { label: '진행중', bg: 'var(--blue-pale)', color: 'var(--blue)'  },
-  done:       { label: '완료',   bg: 'var(--green-bg)',  color: 'var(--green)' },
-  review:     { label: '진행중', bg: 'var(--blue-pale)', color: 'var(--blue)'  },
-};
-
-const INITIAL_BIZ: Biz[] = [
-  { no: '001', name: 'A대학 학생회비 정산', desc: '2024년도 2학기 학생회 지출결의',
-    state: 'inProgress', badge: 'draft', count: '12건', amount: '₩18,240,000', modified: '2024.12.10' },
-  { no: '002', name: 'B연구소 과제비 정산', desc: '2024년 3분기 연구과제 지출',
-    state: 'done', badge: 'done', count: '8건', amount: '₩7,540,000', modified: '2024.11.28' },
-  { no: '003', name: 'C동아리 행사비 정산', desc: '2024 동아리 축제 지출결의',
-    state: 'inProgress', badge: 'review', count: '5건', amount: '₩3,120,000', modified: '2024.12.08' },
-];
+function groupByBusinessName(items: EvidenceItem[]): Biz[] {
+  const map = new Map<string, EvidenceItem[]>();
+  for (const item of items) {
+    const key = item.businessName || '(사업명 없음)';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key)!.push(item);
+  }
+  return Array.from(map.entries()).map(([name, list], i) => {
+    const total = list.reduce((sum, e) => sum + (e.totalAmount ?? 0), 0);
+    const latest = list.map(e => e.updatedAt ?? '').sort().at(-1) ?? '-';
+    return {
+      no: String(i + 1).padStart(3, '0'),
+      name,
+      badge: 'empty' as BizBadge,
+      count: `${list.length}건`,
+      amount: total > 0 ? `₩${total.toLocaleString()}` : '-',
+      modified: latest !== '-' ? latest.slice(0, 10).replace(/-/g, '.') : '-',
+    };
+  });
+}
 
 export default function ExpenseBoardScreen() {
   const router = useRouter();
-  const [bizList, setBizList] = useState<Biz[]>(INITIAL_BIZ);
+  const [bizList, setBizList] = useState<Biz[]>([]);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
-  const [owner, setOwner] = useState('홍길동');
-  const [desc, setDesc] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  function addBiz() {
-    const trimmed = name.trim() || '새 사업';
-    const next: Biz = {
-      no: String(bizList.length + 1).padStart(3, '0'),
-      name: trimmed,
-      desc: desc || '',
-      state: 'inProgress', badge: 'empty',
-      count: '0건', amount: '₩0', modified: '방금 전',
-    };
-    setBizList([...bizList, next]);
+  useEffect(() => {
+    const groupId = getGroupId();
+    if (!groupId) { setLoading(false); return; }
+
+    apiFetch(`/api/evidence/list?groupId=${groupId}`)
+      .then(res => res.ok ? res.json() : Promise.reject(res.status))
+      .then((data: EvidenceItem[]) => setBizList(groupByBusinessName(data)))
+      .catch(() => setBizList([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  function startBiz() {
+    if (!name.trim()) return;
+    sessionStorage.setItem('currentBusinessName', name.trim());
     setOpen(false);
-    setName(''); setDesc('');
-    sessionStorage.setItem('currentBusinessName', trimmed);
+    setName('');
     router.push('/receipt');
   }
 
@@ -100,7 +115,6 @@ export default function ExpenseBoardScreen() {
       <div style={{
         background: '#fff', borderRadius: 12, border: '1px solid var(--gray2)', overflow: 'hidden',
       }}>
-        {/* Head */}
         <div style={{
           display: 'grid',
           gridTemplateColumns: '60px 1fr 120px 80px 130px 100px',
@@ -114,13 +128,19 @@ export default function ExpenseBoardScreen() {
           <div>번호</div><div>사업명</div><div>상태</div><div>건수</div><div>총 금액</div><div>최근 수정</div>
         </div>
 
-        {/* Rows */}
-        {bizList.map((b, i) => {
-          const stateCfg = STATE_TAG[b.state];
+        {loading ? (
+          <div style={{ padding: '32px 20px', textAlign: 'center', fontSize: 13, color: 'var(--gray4)' }}>
+            불러오는 중...
+          </div>
+        ) : bizList.length === 0 ? (
+          <div style={{ padding: '32px 20px', textAlign: 'center', fontSize: 13, color: 'var(--gray4)' }}>
+            등록된 사업이 없습니다
+          </div>
+        ) : bizList.map((b, i) => {
           const badgeCfg = BADGE_CFG[b.badge];
           return (
             <div
-              key={b.no}
+              key={b.name}
               onClick={() => selectBiz(b)}
               style={{
                 display: 'grid',
@@ -135,14 +155,7 @@ export default function ExpenseBoardScreen() {
             >
               <div style={{ fontSize: 11, color: 'var(--gray4)' }}>{b.no}</div>
               <div>
-                <span style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 4,
-                  background: stateCfg.bg, color: stateCfg.color,
-                  fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 100,
-                  marginRight: 8,
-                }}>● {stateCfg.label}</span>
                 <strong style={{ fontSize: 13 }}>{b.name}</strong>
-                {b.desc && <div style={{ fontSize: 11, color: 'var(--gray4)', marginTop: 2 }}>{b.desc}</div>}
               </div>
               <div>
                 <span style={{
@@ -164,34 +177,17 @@ export default function ExpenseBoardScreen() {
         <div style={{ fontSize: 12, color: 'var(--gray4)', marginBottom: 18 }}>
           지출결의를 관리할 사업명을 입력해 주세요
         </div>
-        <div style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 20 }}>
           <label style={fl}>사업명 <span style={{ color: 'var(--red)' }}>*</span></label>
           <input
             style={fi}
             placeholder="예: 2024 동아리 행사비 정산"
             value={name}
             onChange={e => setName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && startBiz()}
           />
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={fl}>담당자</label>
-          <input
-            style={fi}
-            placeholder="홍길동"
-            value={owner}
-            onChange={e => setOwner(e.target.value)}
-          />
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={fl}>설명</label>
-          <textarea
-            style={{ ...fi, height: 72, resize: 'vertical' }}
-            placeholder="사업 관련 간략한 설명"
-            value={desc}
-            onChange={e => setDesc(e.target.value)}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={() => setOpen(false)}
             style={{
@@ -201,11 +197,13 @@ export default function ExpenseBoardScreen() {
             }}
           >취소</button>
           <button
-            onClick={addBiz}
+            onClick={startBiz}
+            disabled={!name.trim()}
             style={{
               flex: 1, background: 'var(--navy)', color: '#fff',
               border: 'none', borderRadius: 6, padding: '9px 20px',
               fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+              opacity: !name.trim() ? 0.5 : 1,
             }}
           >사업 추가</button>
         </div>
