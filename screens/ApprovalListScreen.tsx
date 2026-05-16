@@ -22,6 +22,7 @@ interface Approval {
   steps: Step[];
   createdAt: string;
   updatedAt: string;
+  businessName?: string;
 }
 
 type Tab = 'my' | 'group';
@@ -61,8 +62,14 @@ export default function ApprovalListScreen() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [bizFilter, setBizFilter] = useState<string | null>(null);
 
   useEffect(() => {
+    const stored = sessionStorage.getItem('filterBusinessName');
+    if (stored) {
+      setBizFilter(stored);
+      sessionStorage.removeItem('filterBusinessName');
+    }
     load();
   }, [tab]);
 
@@ -81,9 +88,9 @@ export default function ApprovalListScreen() {
     finally { setLoading(false); }
   }
 
-  const filtered = statusFilter === 'ALL'
-    ? approvals
-    : approvals.filter(a => a.status === statusFilter);
+  const filtered = approvals
+    .filter(a => statusFilter === 'ALL' || a.status === statusFilter)
+    .filter(a => !bizFilter || a.businessName === bizFilter);
 
   const counts = approvals.reduce((acc, a) => {
     acc[a.status] = (acc[a.status] ?? 0) + 1;
@@ -141,6 +148,28 @@ export default function ApprovalListScreen() {
           >{f.label} <span style={{ fontFamily: 'var(--font-mono)' }}>{f.count}</span></button>
         ))}
       </div>
+
+      {bizFilter && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <span style={{ fontSize: 11, color: 'var(--gray5)' }}>사업 필터:</span>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '4px 10px', borderRadius: 100,
+            background: 'var(--navy)', color: '#fff',
+            fontSize: 11, fontWeight: 600,
+          }}>
+            {bizFilter}
+            <button
+              onClick={() => setBizFilter(null)}
+              style={{
+                background: 'none', border: 'none', color: '#fff',
+                cursor: 'pointer', padding: 0, fontSize: 12, lineHeight: 1,
+                fontFamily: 'inherit',
+              }}
+            >×</button>
+          </span>
+        </div>
+      )}
 
       {error && (
         <div style={{

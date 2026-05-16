@@ -95,8 +95,8 @@ export default function ExpenseBoardScreen() {
   }
 
   function selectBiz(b: Biz) {
-    sessionStorage.setItem('currentBusinessName', b.name);
-    router.push('/receipt');
+    sessionStorage.setItem('filterBusinessName', b.name);
+    router.push('/approvals');
   }
 
   const fi: React.CSSProperties = {
